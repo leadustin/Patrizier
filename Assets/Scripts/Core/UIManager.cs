@@ -1,33 +1,41 @@
-using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
+using TMPro;
 using UnityEngine.UI;
+using System.Collections.Generic;
 
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance;
 
-    [Header("Ansichten")]
+    [Header("Ansichten (Canvas)")]
     public GameObject mapCanvas;
     public GameObject cityViewCanvas;
     public Image cityBackgroundImage;
 
-    [Header("Info Panel")]
+    [Header("Gebäude Hotspots (Buttons im CityView)")]
+    public GameObject hotspotMarket;
+    public GameObject hotspotTavern;
+    public GameObject hotspotChurch;
+    public GameObject hotspotShipyard;
+
+    [Header("Gebäude Fenster (Panels)")]
+    public GameObject marketPanel;     // Das Handelsfenster
+    public GameObject tavernPanel;     // Das Tavernen-Fenster (NEU)
+    public GameObject churchPanel;     // Das Kirchen-Fenster (NEU)
+    public GameObject shipyardPanel;   // Das Werft-Fenster (NEU)
+
+    [Header("Info Panel (Karte)")]
     public GameObject cityPanel;
     public TextMeshProUGUI cityNameText;
     public Button btnEnterCity;
 
-    [Header("Markt UI")]
-    public GameObject marketPanel;
+    [Header("Markt UI Elemente")]
     public Transform goodsListContainer;
     public GameObject marketRowPrefab;
     public TextMeshProUGUI playerGoldText;
-
-    // Das Datum oben im UI
     public TextMeshProUGUI dateText;
 
-    // Handels-Variablen
+    // --- HANDELS-LOGIK ---
     public enum MarketMode { CityToShip, CityToKontor, ShipToKontor }
     public MarketMode currentMarketMode = MarketMode.CityToShip;
     public int currentTradeAmount = 1;
@@ -42,18 +50,20 @@ public class UIManager : MonoBehaviour
 
     void Start()
     {
+        // Startzustand: Nur Karte an, alle Fenster zu
         if (mapCanvas != null) mapCanvas.SetActive(true);
         if (cityViewCanvas != null) cityViewCanvas.SetActive(false);
         if (cityPanel != null) cityPanel.SetActive(false);
-        if (marketPanel != null) marketPanel.SetActive(false);
+
+        CloseAllPanels(); // Sicherstellen, dass alle Popups zu sind
 
         // Zeit abonnieren
         if (TimeManager.Instance != null)
         {
             TimeManager.Instance.OnDayChanged += UpdateDateDisplay;
 
-            // Initial-Aufruf: Wir warten auf den ersten Tick oder holen die Startzeit
-            // (Kann leer bleiben oder manuell aufgerufen werden)
+            // Initiales Datum setzen
+            UpdateDateDisplay(TimeManager.Instance.currentDate, TimeManager.Instance.GetSeason(TimeManager.Instance.currentDate.Month));
         }
     }
 
@@ -63,33 +73,29 @@ public class UIManager : MonoBehaviour
             TimeManager.Instance.OnDayChanged -= UpdateDateDisplay;
     }
 
-    // --- ÄNDERUNG: Jahreszeit übersetzen ---
     void UpdateDateDisplay(System.DateTime date, Season season)
     {
         if (dateText != null)
         {
             string seasonName = season.ToString();
-            string monthName = date.ToString("MMMM"); // Standard System-Sprache
+            string monthName = date.ToString("MMMM");
 
             if (LocalizationManager.Instance != null)
             {
                 seasonName = LocalizationManager.Instance.GetSeasonName(season);
-                // NEU: Monat übersetzen
                 monthName = LocalizationManager.Instance.GetMonthName(date.Month);
             }
 
-            // Wir bauen das Datum selbst zusammen: "01. Mai 1300"
             dateText.text = $"{date.Day:00}. {monthName} {date.Year} ({seasonName})";
 
-            if (marketPanel != null && marketPanel.activeSelf)
-            {
-                RefreshMarketList();
-            }
+            // Markt live aktualisieren bei Datumswechsel
+            if (marketPanel != null && marketPanel.activeSelf) RefreshMarketList();
         }
     }
-    // ---------------------------------------
 
-    // --- REST BLEIBT GLEICH (Navigation & Markt-Logik) ---
+    // ---------------------------------------------------------
+    // BEREICH: NAVIGATION (KARTE <-> STADT)
+    // ---------------------------------------------------------
 
     public void OpenCityMenu(City city)
     {
@@ -104,44 +110,89 @@ public class UIManager : MonoBehaviour
     public void EnterCityView()
     {
         if (currentCity == null || currentCity.cityBackgroundSprite == null) return;
+
         CloseCityMenu();
+
+        // 1. Hintergrundbild laden
         cityBackgroundImage.sprite = currentCity.cityBackgroundSprite;
+
+        // 2. Hotspots (Buttons) an/ausschalten je nach Gebäude-Existenz
+        if (hotspotMarket != null) hotspotMarket.SetActive(currentCity.buildings.hasMarketplace);
+        if (hotspotTavern != null) hotspotTavern.SetActive(currentCity.buildings.hasTavern);
+        if (hotspotChurch != null) hotspotChurch.SetActive(currentCity.buildings.hasChurch);
+        if (hotspotShipyard != null) hotspotShipyard.SetActive(currentCity.buildings.hasShipyard);
+
+        // 3. Ansicht wechseln
         mapCanvas.SetActive(false);
         cityViewCanvas.SetActive(true);
     }
 
     public void ReturnToMap()
     {
-        CloseMarket();
+        CloseAllPanels(); // Wichtig: Alle Fenster schließen
         cityViewCanvas.SetActive(false);
         mapCanvas.SetActive(true);
     }
 
-    public void OnClickMarketplace()
+    // ---------------------------------------------------------
+    // BEREICH: GEBÄUDE FENSTER STEUERUNG
+    // ---------------------------------------------------------
+
+    // Hilfsfunktion: Macht erst mal alles zu
+    public void CloseAllPanels()
     {
-        marketPanel.SetActive(true);
-        UpdateGoldDisplay();
-        SetMarketMode(0);
+        if (marketPanel != null) marketPanel.SetActive(false);
+        if (tavernPanel != null) tavernPanel.SetActive(false);
+        if (churchPanel != null) churchPanel.SetActive(false);
+        if (shipyardPanel != null) shipyardPanel.SetActive(false);
     }
 
-    public void CloseMarket() { marketPanel.SetActive(false); }
+    public void OnClickMarketplace()
+    {
+        CloseAllPanels();
+        marketPanel.SetActive(true);
+        UpdateGoldDisplay();
+        SetMarketMode(0); // Reset auf Standard-Ansicht
+    }
+
+    public void OnClickTavern()
+    {
+        CloseAllPanels();
+        if (tavernPanel != null) tavernPanel.SetActive(true);
+        Debug.Log("Taverne geöffnet");
+    }
+
+    public void OnClickChurch()
+    {
+        CloseAllPanels();
+        if (churchPanel != null) churchPanel.SetActive(true);
+        Debug.Log("Kirche geöffnet");
+    }
+
+    public void OnClickShipyard()
+    {
+        CloseAllPanels();
+        if (shipyardPanel != null) shipyardPanel.SetActive(true);
+        Debug.Log("Werft geöffnet");
+    }
+
+    // ---------------------------------------------------------
+    // BEREICH: MARKT LOGIK
+    // ---------------------------------------------------------
 
     public void UpdateGoldDisplay()
     {
+        string goldLabel = "Gold";
+        if (LocalizationManager.Instance != null) goldLabel = LocalizationManager.Instance.Get("UI_GOLD");
+
         if (playerGoldText != null && PlayerManager.Instance != null)
-        {
-            // ALT: playerGoldText.text = "Gold: " + ...
-
-            // NEU: Wir holen das Wort "Gold" aus dem Manager
-            string goldLabel = "Gold";
-            if (LocalizationManager.Instance != null)
-                goldLabel = LocalizationManager.Instance.Get("UI_GOLD");
-
             playerGoldText.text = $"{goldLabel}: {PlayerManager.Instance.GetGold()}";
-        }
     }
 
-    public void SetTradeAmount(int amount) { currentTradeAmount = amount; }
+    public void SetTradeAmount(int amount)
+    {
+        currentTradeAmount = amount;
+    }
 
     public void SetMarketMode(int modeIndex)
     {
@@ -151,6 +202,7 @@ public class UIManager : MonoBehaviour
 
     public void RefreshMarketList()
     {
+        // Aufräumen
         foreach (Transform child in goodsListContainer) Destroy(child.gameObject);
         goodsListContainer.DetachChildren();
 
@@ -168,11 +220,13 @@ public class UIManager : MonoBehaviour
             int currentPrice = 0;
             bool isTransfer = false;
 
+            // Preis holen
             if (currentCity != null)
                 currentPrice = currentCity.GetCurrentPrice(ware);
             else
                 currentPrice = EconomySystem.GetBasePrice(ware);
 
+            // Bestände je nach Modus
             switch (currentMarketMode)
             {
                 case MarketMode.CityToShip:
@@ -195,6 +249,7 @@ public class UIManager : MonoBehaviour
                     break;
             }
 
+            // Zeile befüllen
             MarketRow rowScript = newRow.GetComponent<MarketRow>();
             if (rowScript != null)
             {

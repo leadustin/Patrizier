@@ -10,7 +10,26 @@ public class City : MonoBehaviour
     [Header("Wirtschaft & Bevölkerung")]
     public int population = 2000;
 
-    // --- PRODUKTIONS-ANLAGEN (Konfigurierbar) ---
+    // --- NEU: GEBÄUDE INFRASTRUKTUR (Der Baukasten) ---
+    [Header("Gebäude & Infrastruktur")]
+    public CityInfrastructure buildings;
+
+    [System.Serializable]
+    public class CityInfrastructure
+    {
+        [Header("Öffentliche Gebäude")]
+        public bool hasMarketplace = true; // Fast immer da
+        public bool hasTavern = false;     // Kneipe
+        public bool hasChurch = false;     // Kirche
+        public bool hasShipyard = false;   // Werft
+        public bool hasHealer = false;     // Arzt/Badehaus
+
+        [Header("Verwaltung")]
+        public bool hasCityHall = false;   // Rathaus
+        public bool hasGuild = false;      // Gilde
+    }
+    // ---------------------------------------------------
+
     [Header("Produktion (Konfigurierbar)")]
     public List<ProductionBuilding> productionLines = new List<ProductionBuilding>();
 
@@ -18,12 +37,8 @@ public class City : MonoBehaviour
     public class ProductionBuilding
     {
         public string name = "Betrieb";
-        public WareType ware;           // Dropdown-Auswahl!
-
-        [Header("Produktion pro Tag (Basis)")]
+        public WareType ware;
         public int baseAmount = 10;
-
-        [Header("Jahreszeiten-Faktor (1.0 = 100%)")]
         [Range(0f, 2f)] public float springMult = 1.0f;
         [Range(0f, 2f)] public float summerMult = 1.0f;
         [Range(0f, 2f)] public float autumnMult = 1.0f;
@@ -35,6 +50,7 @@ public class City : MonoBehaviour
     [System.Serializable]
     public struct CityEvents { public bool isUnderSiege; public bool hasPlague; public bool hasFire; public bool isHardWinter; }
 
+    // Inventare
     public Dictionary<string, int> kontorInventory = new Dictionary<string, int>();
     public Dictionary<string, int> marketInventory = new Dictionary<string, int>();
 
@@ -59,21 +75,17 @@ public class City : MonoBehaviour
 
     void InitializeMarket()
     {
-        // Startbestand basierend auf Produktion
         foreach (var prod in productionLines)
         {
             string wareName = prod.ware.ToString();
             AddMarketStock(wareName, prod.baseAmount * 10);
         }
-        // Fallback für leere Märkte vermeiden wir hier vereinfacht
     }
 
     // --- TÄGLICHE ROUTINE ---
-    // WICHTIG: Hier fehlte der zweite Parameter "Season season"!
     void HandleNewDay(System.DateTime date, Season season)
     {
         // 1. VERBRAUCH
-        // Wir iterieren über eine Kopie der Keys, da wir das Dictionary verändern könnten
         List<string> marketWares = new List<string>(marketInventory.Keys);
         foreach (string wareName in marketWares)
         {
@@ -85,11 +97,8 @@ public class City : MonoBehaviour
         foreach (var factory in productionLines)
         {
             string wareString = factory.ware.ToString();
-
-            // Basis Produktion
             float amount = factory.baseAmount;
 
-            // Jahreszeit anwenden
             switch (season)
             {
                 case Season.Frühling: amount *= factory.springMult; break;
@@ -98,15 +107,11 @@ public class City : MonoBehaviour
                 case Season.Winter: amount *= factory.winterMult; break;
             }
 
-            // Ereignisse anwenden
             if (activeEvents.hasPlague) amount *= 0.5f;
             if (activeEvents.isUnderSiege) amount *= 0.1f;
 
             int finalAmount = Mathf.FloorToInt(amount);
-            if (finalAmount > 0)
-            {
-                AddMarketStock(wareString, finalAmount);
-            }
+            if (finalAmount > 0) AddMarketStock(wareString, finalAmount);
         }
     }
 
