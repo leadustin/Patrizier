@@ -66,4 +66,21 @@ public class Ship : MonoBehaviour
     {
         if (type != null) currentHealth = type.maxHealth;
     }
+
+    void OnMouseDown()
+    {
+        // Verhindern, dass man durch UI hindurchklickt (falls Schiff unter einem Button liegt)
+        if (UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
+
+        Debug.Log("Schiff angeklickt: " + shipName);
+
+        if (UIManager.Instance != null)
+        {
+            // Wir sagen dem UI: "Zeig MICH an!"
+            UIManager.Instance.OpenShipStatus(this);
+
+            // Optional: Dieses Schiff auch gleich als "selectedShip" im Manager setzen?
+            // PlayerManager.Instance.selectedShip = this; 
+        }
+    }
 }

@@ -29,6 +29,13 @@ public class UIManager : MonoBehaviour
     public TextMeshProUGUI cityNameText;
     public Button btnEnterCity;
 
+    [Header("Schiffs Status Panel")]
+    public GameObject shipStatusPanel;
+    public TextMeshProUGUI statusNameText;
+    public TextMeshProUGUI statusHealthText;
+    public TextMeshProUGUI statusCargoText;
+    public TextMeshProUGUI statusCrewText;
+
     [Header("Markt UI Elemente")]
     public Transform goodsListContainer;
     public GameObject marketRowPrefab;
@@ -132,6 +139,34 @@ public class UIManager : MonoBehaviour
         CloseAllPanels(); // Wichtig: Alle Fenster schlieﬂen
         cityViewCanvas.SetActive(false);
         mapCanvas.SetActive(true);
+    }
+
+    // ÷ffnet das kleine Fenster
+    public void OpenShipStatus(Ship ship)
+    {
+        // Sicherstellen, dass andere Popups zugehen
+        CloseCityMenu();
+
+        shipStatusPanel.SetActive(true);
+
+        // Daten anzeigen
+        statusNameText.text = ship.shipName;
+
+        // Zustand berechnen
+        float hpPercent = (ship.currentHealth / ship.type.maxHealth) * 100f;
+        statusHealthText.text = $"Zustand: {hpPercent:F0}%"; // "F0" = ohne Nachkommastellen
+
+        // Ladung
+        statusCargoText.text = $"Fracht: {ship.currentCargoLoad} / {ship.GetMaxCargo()}";
+
+        // Crew (Optional, falls du das schon hast, sonst Platzhalter)
+        // statusCrewText.text = $"Crew: {ship.currentCrew} / {ship.type.maxCrew}";
+        statusCrewText.text = "Crew: 5"; // Platzhalter
+    }
+
+    public void CloseShipStatus()
+    {
+        if (shipStatusPanel != null) shipStatusPanel.SetActive(false);
     }
 
     // ---------------------------------------------------------
