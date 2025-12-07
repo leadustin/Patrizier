@@ -5,6 +5,7 @@ public class City : MonoBehaviour
 {
     [Header("Allgemeine Info")]
     public string cityName = "Unbenannt";
+    public CityType type = CityType.Hansestadt;
     public Sprite cityBackgroundSprite;
 
     [Header("Wirtschaft & Bevölkerung")]
@@ -135,6 +136,39 @@ public class City : MonoBehaviour
 
     void OnMouseDown()
     {
-        if (UIManager.Instance != null) UIManager.Instance.OpenCityMenu(this);
+        // 1. Verhindern, dass wir durch UI klicken
+        if (UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
+
+        // 2. Welches Schiff ist ausgewählt?
+        if (PlayerManager.Instance != null && PlayerManager.Instance.selectedShip != null)
+        {
+            Ship selectedShip = PlayerManager.Instance.selectedShip;
+            float distance = Vector3.Distance(transform.position, selectedShip.transform.position);
+
+            if (distance < 0.5f)
+            {
+                // Schiff ist da -> Menü öffnen
+                UIManager.Instance.OpenCityMenu(this);
+            }
+            else
+            {
+                // Schiff ist woanders -> Hinfahren!
+                ShipMovement movement = selectedShip.GetComponent<ShipMovement>();
+                if (movement != null)
+                {
+                    movement.SetDestination(this);
+
+                    // UI schließen (damit man freie Sicht auf die Fahrt hat)
+                    UIManager.Instance.CloseCityMenu();
+                    UIManager.Instance.CloseShipStatus();
+                }
+            }
+        }
+        else
+        {
+            // Kein Schiff ausgewählt? -> Trotzdem Menü öffnen (um Infos zu sehen)
+            // Oder Fehler ausgeben: "Wähle erst ein Schiff!"
+            UIManager.Instance.OpenCityMenu(this);
+        }
     }
 }

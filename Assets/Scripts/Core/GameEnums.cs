@@ -31,3 +31,10 @@ public enum WeaponSize
     Medium, // z.B. Balliste
     Large   // z.B. Große Bombarde
 }
+
+public enum CityType
+{
+    Hansestadt, // Vollwertiges Mitglied (Lübeck, Hamburg...)
+    Kontor,     // Große Auslandsniederlassung (London, Brügge...)
+    Faktorei    // Kleiner Handelsposten (Optional für später)
+}

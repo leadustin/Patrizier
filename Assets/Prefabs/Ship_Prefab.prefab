@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 6142870179854836478}
   - component: {fileID: 1011765332119523679}
   - component: {fileID: 5219266926518309035}
+  - component: {fileID: 436632159299434310}
   m_Layer: 0
   m_Name: Ship_Prefab
   m_TagString: Untagged
@@ -151,3 +152,16 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 1, y: 1}
   m_EdgeRadius: 0
+--- !u!114 &436632159299434310
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7434623836169102524}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dd5fb3c17fa2d5d4b98fd258533a3ca8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  travelSpeed: 2

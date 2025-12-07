@@ -11,6 +11,7 @@ public class ShipType : ScriptableObject
     public int maxCargo = 150;      // Laderaum
     public float maxHealth = 100f;  // Struktur
     public int basePrice = 1500;    // Kaufpreis in der Werft
+    public float speed = 5.0f;
 
     [Header("Kampfwerte")]
     public int weaponSlots = 2;
