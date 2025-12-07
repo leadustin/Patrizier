@@ -6,12 +6,11 @@ public class PlayerManager : MonoBehaviour
     public static PlayerManager Instance;
 
     [Header("Finanzen")]
-    public int currentGold = 2000;
+    public int currentGold = 5000; // Genug Startkapital für ein Schiff
 
-    [Header("Schiff")]
-    public int maxCargo = 100;
-    public int currentCargo = 0;
-    public Dictionary<string, int> inventory = new Dictionary<string, int>();
+    [Header("Schiff Verwaltung")]
+    public GameObject shipPrefab; // Das Aussehen (Prefab)
+    public Ship selectedShip;     // Das aktive Schiff (am Anfang LEER/NULL)
 
     void Awake()
     {
@@ -19,91 +18,98 @@ public class PlayerManager : MonoBehaviour
         else Destroy(gameObject);
     }
 
-    public int GetStock(string wareName)
+    // --- SCHIFF KAUFEN (Der wichtigste Teil) ---
+    public bool BuyShip(ShipType type, City location)
     {
-        if (inventory.ContainsKey(wareName)) return inventory[wareName];
-        return 0;
+        // 1. Haben wir genug Geld?
+        if (currentGold < type.basePrice)
+        {
+            Debug.Log("Nicht genug Gold!");
+            return false;
+        }
+
+        // 2. Geld abziehen
+        currentGold -= type.basePrice;
+
+        // 3. Schiff in der Welt erstellen (am Ort der Stadt)
+        // Wir nutzen das generische Prefab, aber füllen es mit den Daten des Typs
+        GameObject newShipObj = Instantiate(shipPrefab, location.transform.position, Quaternion.identity);
+
+        Ship newShip = newShipObj.GetComponent<Ship>();
+        newShip.type = type; // WICHTIG: Daten zuweisen
+        newShip.shipName = type.typeName + " 1";
+        newShip.currentHealth = type.maxHealth;
+
+        // 4. Dem Spieler zuweisen
+        selectedShip = newShip;
+
+        Debug.Log("Schiff gekauft: " + newShip.shipName);
+        return true;
     }
 
-    // --- NEU: HANDEL MIT DER STADT (Economy Phase 7) ---
+    // --- REPARIEREN ---
+    public bool TryRepairShip()
+    {
+        if (selectedShip == null) return false;
 
-    // Kaufen: Stadt -> Schiff
-    // Diese Methode wird vom MarketRow aufgerufen!
+        int cost = selectedShip.CalculateRepairCost();
+        if (cost <= 0 || currentGold < cost) return false;
+
+        currentGold -= cost;
+        selectedShip.Repair();
+        return true;
+    }
+
+    // --- UMBENENNEN ---
+    public void RenameShip(string newName)
+    {
+        if (selectedShip != null) selectedShip.shipName = newName;
+    }
+
+    // --- HELPER FÜR HANDEL (Damit der Markt funktioniert) ---
+    public int GetGold() { return currentGold; }
+
+    public int GetStock(string ware)
+    {
+        return selectedShip != null ? selectedShip.GetStock(ware) : 0;
+    }
+
     public bool TryBuyFromCity(City city, string wareName, int amount, int unitPrice)
     {
-        int totalCost = amount * unitPrice;
+        if (selectedShip == null) return false;
+        if (currentGold < amount * unitPrice) return false;
+        if (selectedShip.currentCargoLoad + amount > selectedShip.GetMaxCargo()) return false;
+        if (city.GetMarketStock(wareName) < amount) return false;
 
-        // 1. Checks
-        if (currentGold < totalCost) { Debug.Log("Zu wenig Gold"); return false; }
-        if (currentCargo + amount > maxCargo) { Debug.Log("Schiff voll"); return false; }
-
-        // Hat die Stadt genug? (Wichtig für die Wirtschaft)
-        if (city.GetMarketStock(wareName) < amount) { Debug.Log("Stadt hat nicht genug"); return false; }
-
-        // 2. Transaktion
-        currentGold -= totalCost;
-
-        // Spieler bekommt Ware
-        AddCargo(wareName, amount);
-
-        // Stadt verliert Ware (Preis steigt beim nächsten Mal!)
+        currentGold -= amount * unitPrice;
+        selectedShip.AddCargo(wareName, amount);
         city.RemoveMarketStock(wareName, amount);
-
         return true;
     }
 
-    // Verkaufen: Schiff -> Stadt
     public bool TrySellToCity(City city, string wareName, int amount, int unitPrice)
     {
-        if (GetStock(wareName) < amount) return false;
-
-        // Transaktion
-        currentGold += (amount * unitPrice);
-
-        // Spieler gibt Ware ab
-        RemoveCargo(wareName, amount);
-
-        // Stadt bekommt Ware (Preis sinkt beim nächsten Mal!)
+        if (selectedShip == null || selectedShip.GetStock(wareName) < amount) return false;
+        currentGold += amount * unitPrice;
+        selectedShip.RemoveCargo(wareName, amount);
         city.AddMarketStock(wareName, amount);
-
         return true;
     }
-
-    // --- INTERNE LOGISTIK (Hilfsfunktionen) ---
-
-    void AddCargo(string ware, int amount)
-    {
-        currentCargo += amount;
-        if (inventory.ContainsKey(ware)) inventory[ware] += amount;
-        else inventory.Add(ware, amount);
-    }
-
-    void RemoveCargo(string ware, int amount)
-    {
-        currentCargo -= amount;
-        inventory[ware] -= amount;
-        if (inventory[ware] < 0) inventory[ware] = 0;
-    }
-
-    // --- VERSCHIEBEN (Schiff <-> Kontor) ---
 
     public bool TransferToKontor(City city, string wareName, int amount)
     {
-        if (GetStock(wareName) < amount) return false;
-        RemoveCargo(wareName, amount);
+        if (selectedShip == null || selectedShip.GetStock(wareName) < amount) return false;
+        selectedShip.RemoveCargo(wareName, amount);
         city.AddToKontor(wareName, amount);
         return true;
     }
 
     public bool TransferToShip(City city, string wareName, int amount)
     {
-        if (city.GetKontorStock(wareName) < amount) return false;
-        if (currentCargo + amount > maxCargo) return false;
-
+        if (selectedShip == null || city.GetKontorStock(wareName) < amount) return false;
+        if (selectedShip.currentCargoLoad + amount > selectedShip.GetMaxCargo()) return false;
         city.AddToKontor(wareName, -amount);
-        AddCargo(wareName, amount);
+        selectedShip.AddCargo(wareName, amount);
         return true;
     }
-
-    public int GetGold() { return currentGold; }
 }

@@ -24,3 +24,10 @@ public enum WareType
     Felle,
     Honig
 }
+
+public enum WeaponSize
+{
+    Small,  // z.B. kleine Steinbüchse
+    Medium, // z.B. Balliste
+    Large   // z.B. Große Bombarde
+}
