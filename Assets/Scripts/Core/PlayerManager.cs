@@ -39,6 +39,7 @@ public class PlayerManager : MonoBehaviour
         newShip.type = type; // WICHTIG: Daten zuweisen
         newShip.shipName = type.typeName + " 1";
         newShip.currentHealth = type.maxHealth;
+        newShip.currentCityLocation = location;
 
         // 4. Dem Spieler zuweisen
         selectedShip = newShip;
