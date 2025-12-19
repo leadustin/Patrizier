@@ -16,7 +16,6 @@ public class City : MonoBehaviour
 
     // ------------------------------------------------------------
     // 2. GEBÄUDE (INFRASTRUKTUR)
-    // Hier stellst du ein, welche Gebäude die Stadt hat (fürs UI)
     // ------------------------------------------------------------
     [Header("Gebäude & Infrastruktur")]
     public CityInfrastructure buildings;
@@ -25,20 +24,19 @@ public class City : MonoBehaviour
     public class CityInfrastructure
     {
         [Header("Öffentliche Gebäude")]
-        public bool hasMarketplace = true; // Fast immer da
-        public bool hasTavern = false;     // Kneipe
-        public bool hasChurch = false;     // Kirche
-        public bool hasShipyard = false;   // Werft
-        public bool hasHealer = false;     // Arzt/Badehaus
+        public bool hasMarketplace = true;
+        public bool hasTavern = false;
+        public bool hasChurch = false;
+        public bool hasShipyard = false;
+        public bool hasHealer = false;
 
         [Header("Verwaltung")]
-        public bool hasCityHall = false;   // Rathaus
-        public bool hasGuild = false;      // Gilde
+        public bool hasCityHall = false;
+        public bool hasGuild = false;
     }
 
     // ------------------------------------------------------------
     // 3. PRODUKTION (WAS WIRD HERGESTELLT?)
-    // Konfigurierbar pro Jahreszeit
     // ------------------------------------------------------------
     [Header("Produktion (Konfigurierbar)")]
     public List<ProductionBuilding> productionLines = new List<ProductionBuilding>();
@@ -46,8 +44,8 @@ public class City : MonoBehaviour
     [System.Serializable]
     public class ProductionBuilding
     {
-        public string name = "Betrieb"; // Nur für Übersicht im Editor
-        public WareType ware;           // Dropdown-Auswahl (Enum)
+        public string name = "Betrieb";
+        public WareType ware;
 
         [Header("Produktion pro Tag (Basis)")]
         public int baseAmount = 10;
@@ -68,10 +66,10 @@ public class City : MonoBehaviour
     [System.Serializable]
     public struct CityEvents
     {
-        public bool isUnderSiege; // Belagerung (Preise hoch, Prod stoppt)
-        public bool hasPlague;    // Pest (Verbrauch runter, Prod runter)
-        public bool hasFire;      // Feuer (Baumaterial teuer)
-        public bool isHardWinter; // Eis (Hafen zu? - noch nicht implementiert)
+        public bool isUnderSiege;
+        public bool hasPlague;
+        public bool hasFire;
+        public bool isHardWinter;
     }
 
     // Die Warenlager (String = Warenname, Int = Menge)
@@ -87,7 +85,6 @@ public class City : MonoBehaviour
 
     void OnEnable()
     {
-        // Wir melden uns beim TimeManager an, um jeden Tag benachrichtigt zu werden
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnDayChanged += HandleNewDay;
     }
@@ -103,19 +100,13 @@ public class City : MonoBehaviour
         InitializeMarket();
     }
 
-    // Füllt den Markt beim Spielstart, damit er nicht leer ist
     void InitializeMarket()
     {
-        // Wir gehen durch die Produktionslinien und füllen Startbestände auf
         foreach (var prod in productionLines)
         {
             string wareName = prod.ware.ToString();
-            // Startvorrat für ca. 10 Tage
             AddMarketStock(wareName, prod.baseAmount * 10);
         }
-
-        // Optional: Auch Waren, die wir NICHT produzieren, sollten minimal da sein (Importe)
-        // Das kann man später verfeinern.
     }
 
     // ------------------------------------------------------------
@@ -123,28 +114,21 @@ public class City : MonoBehaviour
     // ------------------------------------------------------------
     void HandleNewDay(System.DateTime date, Season season)
     {
-        // A) VERBRAUCH (Bevölkerung isst/nutzt Waren)
-        // Wir iterieren über eine Kopie der Keys, da wir das Dictionary verändern könnten
+        // A) VERBRAUCH
         List<string> marketWares = new List<string>(marketInventory.Keys);
         foreach (string wareName in marketWares)
         {
             int consumption = EconomySystem.CalculateDailyConsumption(wareName, population);
-
-            // Ereignisse: Bei Pest sterben Leute -> weniger Verbrauch
             if (activeEvents.hasPlague) consumption = Mathf.FloorToInt(consumption * 0.7f);
-
             RemoveMarketStock(wareName, consumption);
         }
 
-        // B) PRODUKTION (Betriebe stellen her)
+        // B) PRODUKTION
         foreach (var factory in productionLines)
         {
             string wareString = factory.ware.ToString();
-
-            // Basis Produktion
             float amount = factory.baseAmount;
 
-            // Jahreszeit anwenden
             switch (season)
             {
                 case Season.Frühling: amount *= factory.springMult; break;
@@ -153,9 +137,8 @@ public class City : MonoBehaviour
                 case Season.Winter: amount *= factory.winterMult; break;
             }
 
-            // Ereignisse anwenden
-            if (activeEvents.hasPlague) amount *= 0.5f;     // Weniger Arbeiter
-            if (activeEvents.isUnderSiege) amount *= 0.1f;  // Belagerung = fast nix geht
+            if (activeEvents.hasPlague) amount *= 0.5f;
+            if (activeEvents.isUnderSiege) amount *= 0.1f;
 
             int finalAmount = Mathf.FloorToInt(amount);
             if (finalAmount > 0)
@@ -170,35 +153,25 @@ public class City : MonoBehaviour
     // ------------------------------------------------------------
     void OnMouseDown()
     {
-        // Verhindern, dass man durch UI hindurchklickt
         if (UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
 
-        // Prüfen: Haben wir ein Schiff ausgewählt?
         if (PlayerManager.Instance != null && PlayerManager.Instance.selectedShip != null)
         {
             Ship selectedShip = PlayerManager.Instance.selectedShip;
             float distance = Vector3.Distance(transform.position, selectedShip.transform.position);
 
-            // Ist das Schiff nah genug (im Hafen)?
             if (distance < 0.5f)
             {
-                // Schiff ist da -> Stadt-Menü öffnen
                 if (UIManager.Instance != null) UIManager.Instance.OpenCityMenu(this);
-
-                // Schiff weiß jetzt: "Ich bin in dieser Stadt"
                 selectedShip.currentCityLocation = this;
             }
             else
             {
-                // Schiff ist woanders -> REISE STARTEN (Wegfindung)
                 ShipMovement movement = selectedShip.GetComponent<ShipMovement>();
-
-                // Startpunkt ermitteln (Wo war das Schiff zuletzt?)
                 City startCity = selectedShip.currentCityLocation;
 
                 if (startCity != null && movement != null)
                 {
-                    // Befehl an Schiff: Fahr von Start nach Hier
                     movement.SetDestination(startCity, this);
                 }
                 else
@@ -209,7 +182,6 @@ public class City : MonoBehaviour
         }
         else
         {
-            // Kein Schiff ausgewählt -> Nur Info-Menü öffnen (Cheat/Debug/Ansicht)
             if (UIManager.Instance != null) UIManager.Instance.OpenCityMenu(this);
         }
     }
@@ -218,7 +190,6 @@ public class City : MonoBehaviour
     // 8. HILFSMETHODEN (API)
     // ------------------------------------------------------------
 
-    // Prüft, ob diese Stadt eine Ware herstellt (für Preis-Bonus)
     public bool DoesProduce(string wareName)
     {
         foreach (var p in productionLines)
@@ -228,10 +199,27 @@ public class City : MonoBehaviour
         return false;
     }
 
-    // Preis abfragen (delegiert an EconomySystem)
+    // --- PREIS BERECHNUNG ---
+
+    // Einfache Abfrage (für UI etc.)
     public int GetCurrentPrice(string ware)
     {
         return EconomySystem.CalculatePrice(ware, GetMarketStock(ware), this);
+    }
+
+    // Erweiterte Abfrage (WICHTIG für PlayerManager/Werft)
+    public int GetPrice(string ware, bool isBuyingFromCity)
+    {
+        int basePrice = GetCurrentPrice(ware);
+
+        // Optional: Kauf von der Stadt ist teurer als Verkauf an die Stadt (Spread)
+        // Hier: 10% Aufschlag wenn man Material kauft
+        if (isBuyingFromCity)
+        {
+            return Mathf.CeilToInt(basePrice * 1.1f);
+        }
+
+        return basePrice;
     }
 
     // --- MARKT INVENTAR ---

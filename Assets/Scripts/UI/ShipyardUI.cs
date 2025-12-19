@@ -1,98 +1,241 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
+using System.Collections.Generic;
 
 public class ShipyardUI : MonoBehaviour
 {
-    [Header("Panels")]
-    public GameObject repairPanel; // Das Panel für Reparatur
-    public GameObject buyPanel;    // Das Panel für den Kauf
+    [Header("--- AREAS ---")]
+    public GameObject buildArea;
+    public GameObject queueArea;
+    public GameObject repairArea;
+    public GameObject sellArea;
+    public GameObject upgradeArea;
 
-    [Header("Kauf UI")]
-    public ShipType starterShipType; // Die Schnigge (Daten)
-    public TextMeshProUGUI buyInfoText; // "Kauf Schnigge: 1500 Gold"
-    public Button buyButton;
+    [Header("--- DATEN ---")]
+    public List<ShipType> availableShipTypes;
+    private int currentSelectionIndex = 0;
 
-    [Header("Reparatur UI")]
-    public TMP_InputField nameInput;
-    public Slider healthSlider;
-    public TextMeshProUGUI costText;
-    public Button repairButton;
+    // ========================================================
+    // LINKE SEITE: SCHIFF & WERTE
+    // ========================================================
+    [Header("--- UI LINKS (Schiff) ---")]
+    public Image shipImage;
+    public TextMeshProUGUI shipNameText;
+    public Button nextButton;
+    public Button prevButton;
 
-    void OnEnable()
+    [Header("--- UI LINKS (Die 6 Icons) ---")]
+    public TextMeshProUGUI statCargoText;      // Laderaum
+    public TextMeshProUGUI statManeuverText;   // Wendigkeit
+    public TextMeshProUGUI statHealthText;     // Trefferpunkte
+    public TextMeshProUGUI statCostText;       // Betriebskosten
+    public TextMeshProUGUI statSlotsText;      // Upgrade Slots
+    public TextMeshProUGUI statRiverText;      // Meer/Fluss
+
+    // ========================================================
+    // RECHTE SEITE: MATERIAL & KOSTEN
+    // ========================================================
+    [Header("--- UI RECHTS (Baustelle) ---")]
+    public Transform materialListParent;
+    public GameObject materialItemPrefab;
+
+    // HIER GEÄNDERT: Kein "Arbeitslohn" Text mehr
+    public TextMeshProUGUI materialCostText;   // "Material: 400"
+    public TextMeshProUGUI totalCostText;      // "Gesamt: 1900"
+    public TextMeshProUGUI timeText;           // "Dauer: 14 Tage"
+
+    public Toggle useOwnMaterialsToggle;
+    public Button buildButton;
+
+    // ========================================================
+    // ANDERE TABS
+    // ========================================================
+    [Header("--- ANDERE TABS ---")]
+    public TextMeshProUGUI queueListText;
+
+    public TextMeshProUGUI genericInfoText;
+    public TextMeshProUGUI genericCostText;
+    public Button genericActionButton;
+
+    private void Start()
     {
-        UpdateUI();
+        ShowArea_Build();
+        if (useOwnMaterialsToggle != null)
+            useOwnMaterialsToggle.onValueChanged.AddListener(delegate { UpdateBuildUI(); });
     }
 
-    public void UpdateUI()
+    private void Update()
     {
-        if (PlayerManager.Instance == null) return;
+        if (queueArea != null && queueArea.activeSelf) UpdateQueueUI();
+    }
 
-        // ENTSCHEIDUNG: Haben wir ein Schiff?
-        if (PlayerManager.Instance.selectedShip == null)
+    public void ShowArea_Build() { ActivateArea(buildArea); UpdateBuildUI(); }
+    public void ShowArea_Queue() { ActivateArea(queueArea); UpdateQueueUI(); }
+    public void ShowArea_Repair() { ActivateArea(repairArea); UpdateRepairUI(); }
+    public void ShowArea_Sell() { ActivateArea(sellArea); UpdateSellUI(); }
+    public void ShowArea_Upgrade() { ActivateArea(upgradeArea);/* UpdateUpgradeUI(); */ }
+
+    private void ActivateArea(GameObject areaToActive)
+    {
+        if (buildArea) buildArea.SetActive(false);
+        if (queueArea) queueArea.SetActive(false);
+        if (repairArea) repairArea.SetActive(false);
+        if (sellArea) sellArea.SetActive(false);
+        if (upgradeArea) upgradeArea.SetActive(false);
+
+        if (areaToActive) areaToActive.SetActive(true);
+    }
+
+    // ========================================================
+    // HAUPTFUNKTION: BUILD UI UPDATE
+    // ========================================================
+    private void UpdateBuildUI()
+    {
+        if (availableShipTypes == null || availableShipTypes.Count == 0) return;
+        currentSelectionIndex = Mathf.Clamp(currentSelectionIndex, 0, availableShipTypes.Count - 1);
+        ShipType type = availableShipTypes[currentSelectionIndex];
+
+        City city = UIManager.Instance.currentCity;
+        bool useOwn = useOwnMaterialsToggle != null && useOwnMaterialsToggle.isOn;
+
+        // --- LINKS: SCHIFF ---
+        if (shipNameText) shipNameText.text = type.typeName;
+        if (shipImage) shipImage.sprite = type.icon;
+
+        // Die 6 Status Werte setzen
+        if (statCargoText) statCargoText.text = $"{type.maxCargo}";
+        if (statManeuverText) statManeuverText.text = $"{type.maneuverability}%";
+        if (statHealthText) statHealthText.text = $"{type.maxHealth}";
+        if (statCostText) statCostText.text = $"{type.dailyMaintenance}";
+        if (statSlotsText) statSlotsText.text = $"{type.upgradeSlots}";
+        if (statRiverText) statRiverText.text = type.isRiverCapable ? "Meer/Fluss" : "Nur Meer";
+
+        if (nextButton)
         {
-            // --- MODUS: KAUFEN ---
-            if (repairPanel) repairPanel.SetActive(false);
-            if (buyPanel) buyPanel.SetActive(true);
+            nextButton.onClick.RemoveAllListeners();
+            nextButton.onClick.AddListener(() => { currentSelectionIndex++; UpdateBuildUI(); });
+            nextButton.interactable = currentSelectionIndex < availableShipTypes.Count - 1;
+        }
+        if (prevButton)
+        {
+            prevButton.onClick.RemoveAllListeners();
+            prevButton.onClick.AddListener(() => { currentSelectionIndex--; UpdateBuildUI(); });
+            prevButton.interactable = currentSelectionIndex > 0;
+        }
 
-            if (starterShipType != null)
+        // --- RECHTS: MATERIAL & KOSTEN ---
+        if (materialListParent != null && materialItemPrefab != null)
+        {
+            foreach (Transform child in materialListParent) Destroy(child.gameObject);
+
+            foreach (var req in type.requiredResources)
             {
-                int cost = starterShipType.basePrice;
-                buyInfoText.text = $"{starterShipType.typeName} kaufen\nKosten: {cost} Gold\nKapazität: {starterShipType.maxCargo}";
+                GameObject item = Instantiate(materialItemPrefab, materialListParent);
 
-                // Button nur aktiv wenn genug Geld
-                buyButton.interactable = (PlayerManager.Instance.currentGold >= cost);
+                Image iconImg = item.transform.Find("Icon")?.GetComponent<Image>();
+                TextMeshProUGUI amountTxt = item.transform.Find("AmountText")?.GetComponent<TextMeshProUGUI>();
+
+                if (iconImg) iconImg.sprite = req.icon;
+
+                int inKontor = city.GetKontorStock(req.wareName);
+                int inMarket = city.GetMarketStock(req.wareName);
+
+                bool hasEnough = false;
+                if (useOwn) hasEnough = (inKontor + inMarket) >= req.amount;
+                else hasEnough = inMarket >= req.amount;
+
+                if (amountTxt)
+                {
+                    amountTxt.text = $"{req.amount}";
+                    amountTxt.color = hasEnough ? Color.white : Color.red;
+                }
             }
+        }
+
+        var calculation = PlayerManager.Instance.CalculateBuildCost(type, city, useOwn);
+
+        // Berechnung: Gesamt - Basispreis = Materialkosten
+        int materialCosts = calculation.totalCost - type.baseBuildPrice;
+
+        // HIER GEÄNDERT: Wir zeigen nur noch Material, Gesamt und Zeit an
+        if (materialCostText) materialCostText.text = $"Material: {materialCosts}";
+        if (totalCostText) totalCostText.text = $"Gesamt: {calculation.totalCost}";
+        if (timeText) timeText.text = $"Bauzeit: {type.buildTimeDays} Tage";
+
+        if (buildButton)
+        {
+            buildButton.interactable = calculation.canBuild;
+            buildButton.onClick.RemoveAllListeners();
+            buildButton.onClick.AddListener(() => {
+                if (PlayerManager.Instance.OrderShip(type, city, useOwn))
+                {
+                    UIManager.Instance.UpdateGoldDisplay();
+                    ShowArea_Queue();
+                }
+            });
+        }
+    }
+
+    // --- QUEUE ---
+    private void UpdateQueueUI()
+    {
+        if (PlayerManager.Instance.buildQueue.Count == 0)
+        {
+            if (queueListText) queueListText.text = "Keine laufenden Aufträge.";
         }
         else
         {
-            // --- MODUS: REPARIEREN ---
-            if (repairPanel) repairPanel.SetActive(true);
-            if (buyPanel) buyPanel.SetActive(false);
-
-            Ship ship = PlayerManager.Instance.selectedShip;
-
-            if (nameInput != null) nameInput.text = ship.shipName;
-
-            // Zustand anzeigen
-            float hpPercent = (ship.currentHealth / ship.type.maxHealth);
-            if (healthSlider != null) healthSlider.value = hpPercent;
-
-            int cost = ship.CalculateRepairCost();
-            if (costText != null) costText.text = cost > 0 ? $"Reparatur: {cost} Gold" : "Zustand: Perfekt";
-
-            if (repairButton != null)
-                repairButton.interactable = (cost > 0 && PlayerManager.Instance.currentGold >= cost);
+            string content = "<b>Laufende Aufträge:</b>\n\n";
+            foreach (var order in PlayerManager.Instance.buildQueue)
+            {
+                content += $"- {order.type.typeName}: {order.daysLeft} Tage\n";
+            }
+            if (queueListText) queueListText.text = content;
         }
     }
 
-    // --- BUTTON EVENTS ---
-
-    public void OnBuyClicked()
+    // --- REPAIR ---
+    private void UpdateRepairUI()
     {
-        // Wir kaufen in der Stadt, wo wir gerade sind
-        City currentCity = UIManager.Instance.currentCity;
+        Ship ship = PlayerManager.Instance.selectedShip;
+        if (ship == null) { if (genericInfoText) genericInfoText.text = "Kein Schiff"; return; }
 
-        bool success = PlayerManager.Instance.BuyShip(starterShipType, currentCity);
+        int cost = ship.CalculateRepairCost();
+        if (genericInfoText) genericInfoText.text = $"Reparatur: {ship.shipName}";
+        if (genericCostText) genericCostText.text = $"Kosten: {cost}";
 
-        if (success)
+        if (genericActionButton)
         {
-            UIManager.Instance.UpdateGoldDisplay();
-            UpdateUI(); // Umschalten auf Reparatur-Ansicht
+            genericActionButton.interactable = (cost > 0 && PlayerManager.Instance.currentGold >= cost);
+            genericActionButton.onClick.RemoveAllListeners();
+            genericActionButton.onClick.AddListener(() => {
+                PlayerManager.Instance.TryRepairShip();
+                UIManager.Instance.UpdateGoldDisplay();
+                UpdateRepairUI();
+            });
         }
     }
 
-    public void OnRepairClicked()
+    // --- SELL ---
+    private void UpdateSellUI()
     {
-        if (PlayerManager.Instance.TryRepairShip())
+        Ship ship = PlayerManager.Instance.selectedShip;
+        if (ship == null) return;
+        int val = Mathf.RoundToInt(ship.type.baseBuildPrice * 0.5f);
+        if (genericInfoText) genericInfoText.text = $"Verkaufen: {ship.shipName}?";
+        if (genericCostText) genericCostText.text = $"Erlös: {val}";
+        if (genericActionButton)
         {
-            UIManager.Instance.UpdateGoldDisplay();
-            UpdateUI();
+            genericActionButton.interactable = true;
+            genericActionButton.onClick.RemoveAllListeners();
+            genericActionButton.onClick.AddListener(() => {
+                PlayerManager.Instance.currentGold += val;
+                Destroy(ship.gameObject);
+                PlayerManager.Instance.selectedShip = null;
+                UIManager.Instance.UpdateGoldDisplay();
+                ShowArea_Build();
+            });
         }
-    }
-
-    public void OnRename(string newName)
-    {
-        PlayerManager.Instance.RenameShip(newName);
     }
 }

@@ -10,18 +10,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 642af7f9ce662974b9de2008cade3338, type: 3}
-  m_Name: Schnigge
+  m_Name: Kogge
   m_EditorClassIdentifier: 
-  typeName: Schnigge
-  description: Ein robustes Handelsschiff.
-  icon: {fileID: 3339194426100719046, guid: bc8144b703d1375479f3220cd01c95d8, type: 3}
+  typeName: Kogge
+  description: "Ein  Schiff f\xFCr den bewaffneten Handel."
+  icon: {fileID: 0}
   baseBuildPrice: 1500
   buildTimeDays: 14
   requiredResources: []
-  maxCargo: 200
+  maxCargo: 450
   maneuverability: 100
-  maxHealth: 70
+  maxHealth: 100
   dailyMaintenance: 5
   upgradeSlots: 2
-  isRiverCapable: 1
-  speed: 6
+  isRiverCapable: 0
+  speed: 5

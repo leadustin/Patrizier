@@ -10,22 +10,23 @@ public class Ship : MonoBehaviour
     public string shipName;
     public float currentHealth;
 
-    // --- NEU: WO IST DAS SCHIFF? ---
-    public City currentCityLocation;
-    // -------------------------------
+    [Header("Upgrades")]
+    public int extraCargoSpace = 0; // Das ist neu: Hier speichern wir den Ausbau
 
+    public City currentCityLocation;
     public int currentCargoLoad = 0;
     public Dictionary<string, int> cargo = new Dictionary<string, int>();
 
     void Start()
     {
-        if (type != null && currentHealth <= 0)
-        {
-            currentHealth = type.maxHealth;
-        }
+        if (type != null && currentHealth <= 0) currentHealth = type.maxHealth;
     }
 
-    public int GetMaxCargo() { return type != null ? type.maxCargo : 0; }
+    // WICHTIG: Wir rechnen den Extra-Platz dazu
+    public int GetMaxCargo()
+    {
+        return (type != null ? type.maxCargo : 0) + extraCargoSpace;
+    }
 
     public int GetStock(string ware) { return cargo.ContainsKey(ware) ? cargo[ware] : 0; }
 
