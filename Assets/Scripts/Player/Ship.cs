@@ -9,9 +9,13 @@ public class Ship : MonoBehaviour
     [Header("Aktueller Zustand")]
     public string shipName;
     public float currentHealth;
+    public bool isUnderRepair = false; // WICHTIG: Status für Reparatur
+
+    [Header("Besatzung")]
+    public int currentCrew = 0; // WICHTIG: Aktuelle Mannschaft
 
     [Header("Upgrades")]
-    public int extraCargoSpace = 0; // Das ist neu: Hier speichern wir den Ausbau
+    public int extraCargoSpace = 0;
 
     public City currentCityLocation;
     public int currentCargoLoad = 0;
@@ -22,7 +26,6 @@ public class Ship : MonoBehaviour
         if (type != null && currentHealth <= 0) currentHealth = type.maxHealth;
     }
 
-    // WICHTIG: Wir rechnen den Extra-Platz dazu
     public int GetMaxCargo()
     {
         return (type != null ? type.maxCargo : 0) + extraCargoSpace;
@@ -41,12 +44,4 @@ public class Ship : MonoBehaviour
         if (cargo.ContainsKey(ware)) { cargo[ware] -= amount; if (cargo[ware] < 0) cargo[ware] = 0; }
         currentCargoLoad -= amount; if (currentCargoLoad < 0) currentCargoLoad = 0;
     }
-
-    public int CalculateRepairCost()
-    {
-        if (type == null) return 0;
-        return Mathf.CeilToInt((type.maxHealth - currentHealth) * 10);
-    }
-
-    public void Repair() { if (type != null) currentHealth = type.maxHealth; }
 }

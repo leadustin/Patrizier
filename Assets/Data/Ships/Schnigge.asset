@@ -15,13 +15,29 @@ MonoBehaviour:
   typeName: Schnigge
   description: Ein robustes Handelsschiff.
   icon: {fileID: 3339194426100719046, guid: bc8144b703d1375479f3220cd01c95d8, type: 3}
-  baseBuildPrice: 1500
+  baseBuildPrice: 500
   buildTimeDays: 14
-  requiredResources: []
+  requiredResources:
+  - wareType: 8
+    amount: 40
+    icon: {fileID: -1803049995159951910, guid: 058207d478473584187cd74e33a36774, type: 3}
+  - wareType: 15
+    amount: 10
+    icon: {fileID: -2992267820872933402, guid: f3a05b937c2cb104e8aec850dad14828, type: 3}
+  - wareType: 14
+    amount: 10
+    icon: {fileID: 0}
+  - wareType: 17
+    amount: 10
+    icon: {fileID: 0}
+  - wareType: 11
+    amount: 10
+    icon: {fileID: 0}
   maxCargo: 200
   maneuverability: 100
   maxHealth: 70
   dailyMaintenance: 5
   upgradeSlots: 2
+  maxCrew: 20
   isRiverCapable: 1
   speed: 6

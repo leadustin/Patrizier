@@ -14,8 +14,30 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   typeName: Kraier
   description: "Ein schnelles Schiff f\xFCr den bewaffneten Handel."
-  maxCargo: 250
-  maxHealth: 100
-  basePrice: 2500
+  icon: {fileID: 0}
+  baseBuildPrice: 15000
+  buildTimeDays: 14
+  requiredResources:
+  - wareType: 8
+    amount: 60
+    icon: {fileID: -1803049995159951910, guid: 058207d478473584187cd74e33a36774, type: 3}
+  - wareType: 15
+    amount: 20
+    icon: {fileID: 0}
+  - wareType: 14
+    amount: 20
+    icon: {fileID: 0}
+  - wareType: 17
+    amount: 20
+    icon: {fileID: 0}
+  - wareType: 11
+    amount: 20
+    icon: {fileID: 0}
+  maxCargo: 300
+  maneuverability: 90
+  maxHealth: 75
+  dailyMaintenance: 30
+  upgradeSlots: 2
+  maxCrew: 20
+  isRiverCapable: 1
   speed: 8
-  weaponSlots: 6

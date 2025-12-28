@@ -10,33 +10,33 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 642af7f9ce662974b9de2008cade3338, type: 3}
-  m_Name: Kogge
+  m_Name: Hansekogge
   m_EditorClassIdentifier: 
-  typeName: Kogge
+  typeName: Hansekogge
   description: "Ein  Schiff f\xFCr den bewaffneten Handel."
   icon: {fileID: 0}
-  baseBuildPrice: 25000
+  baseBuildPrice: 50000
   buildTimeDays: 14
   requiredResources:
   - wareType: 8
-    amount: 100
+    amount: 200
     icon: {fileID: 0}
   - wareType: 15
-    amount: 30
+    amount: 50
     icon: {fileID: 0}
   - wareType: 14
-    amount: 30
+    amount: 50
     icon: {fileID: 0}
   - wareType: 17
-    amount: 30
+    amount: 50
     icon: {fileID: 0}
   - wareType: 11
-    amount: 30
+    amount: 50
     icon: {fileID: 0}
-  maxCargo: 500
-  maneuverability: 80
-  maxHealth: 125
-  dailyMaintenance: 50
+  maxCargo: 1000
+  maneuverability: 60
+  maxHealth: 250
+  dailyMaintenance: 100
   upgradeSlots: 2
   isRiverCapable: 0
   speed: 5

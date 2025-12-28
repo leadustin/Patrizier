@@ -1,14 +1,19 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 using System;
+using System.Linq;
 
 [System.Serializable]
 public class ShipOrder
 {
     public string shipName;
-    public ShipType type;
+    public ShipType type;      // Für Neubau
+    public Ship existingShip;  // Für Reparatur
     public int daysLeft;
     public City location;
+
+    public bool isRepair;      // Unterscheidung Bau vs. Reparatur
+    public bool isPlayerShip;  // Für KI-Konkurrenz
 }
 
 public class PlayerManager : MonoBehaviour
@@ -21,6 +26,9 @@ public class PlayerManager : MonoBehaviour
     [Header("Schiff Verwaltung")]
     public GameObject shipPrefab;
     public Ship selectedShip;
+
+    [Header("Werft Einstellungen")]
+    public int defaultShipyardCapacity = 1;
 
     [Header("Warteschlange")]
     public List<ShipOrder> buildQueue = new List<ShipOrder>();
@@ -43,10 +51,51 @@ public class PlayerManager : MonoBehaviour
             TimeManager.Instance.OnDayChanged -= ProcessQueue;
     }
 
-    // ------------------------------------------------------------
-    // 1. BAU-LOGIK
-    // ------------------------------------------------------------
+    // ============================================================
+    // 1. WERFT & QUEUE LOGIK
+    // ============================================================
 
+    void ProcessQueue(DateTime date, Season season)
+    {
+        Dictionary<City, int> activeJobsPerCity = new Dictionary<City, int>();
+
+        for (int i = 0; i < buildQueue.Count; i++)
+        {
+            ShipOrder order = buildQueue[i];
+
+            if (!activeJobsPerCity.ContainsKey(order.location)) activeJobsPerCity[order.location] = 0;
+
+            if (activeJobsPerCity[order.location] < defaultShipyardCapacity)
+            {
+                order.daysLeft--;
+                activeJobsPerCity[order.location]++;
+
+                if (order.daysLeft <= 0)
+                {
+                    FinishOrder(order);
+                    buildQueue.RemoveAt(i);
+                    i--;
+                }
+            }
+        }
+    }
+
+    private void FinishOrder(ShipOrder order)
+    {
+        if (order.isRepair && order.existingShip != null)
+        {
+            order.existingShip.currentHealth = order.existingShip.type.maxHealth;
+            order.existingShip.isUnderRepair = false;
+            // Falls Mannschaft entlassen wurde, ist sie jetzt 0 (wurde beim OrderRepair schon gesetzt)
+            Debug.Log($"Reparatur abgeschlossen: {order.shipName}");
+        }
+        else if (!order.isRepair)
+        {
+            SpawnShip(order.type, order.location, order.shipName);
+        }
+    }
+
+    // --- Neubau Berechnungen ---
     public (int totalCost, bool canBuild) CalculateBuildCost(ShipType type, City city, bool useOwnMaterials)
     {
         int materialCost = 0;
@@ -54,176 +103,254 @@ public class PlayerManager : MonoBehaviour
 
         foreach (var req in type.requiredResources)
         {
+            string wName = req.wareType.ToString();
             int needed = req.amount;
-
-            // A) Eigene Waren nutzen?
             if (useOwnMaterials)
             {
-                int inKontor = city.GetKontorStock(req.wareName);
-                if (inKontor >= needed)
-                {
-                    needed = 0; // Haben wir komplett selbst
-                }
-                else
-                {
-                    needed -= inKontor; // Rest muss gekauft werden
-                }
+                int inKontor = city.GetKontorStock(wName);
+                if (inKontor >= needed) needed = 0; else needed -= inKontor;
             }
-
-            // B) Rest vom Markt kaufen
             if (needed > 0)
             {
-                if (city.GetMarketStock(req.wareName) >= needed)
-                {
-                    // Preis mit Aufschlag bei Kauf von Stadt
-                    int pricePerUnit = city.GetPrice(req.wareName, true);
-                    materialCost += needed * pricePerUnit;
-                }
-                else
-                {
-                    missingGoods = true; // Stadt hat es auch nicht!
-                }
+                if (city.GetMarketStock(wName) >= needed) materialCost += needed * city.GetPrice(wName, true);
+                else missingGoods = true;
             }
         }
-
         int total = type.baseBuildPrice + materialCost;
-        bool possible = !missingGoods && currentGold >= total;
-
-        return (total, possible);
+        return (total, !missingGoods && currentGold >= total);
     }
 
-    public bool OrderShip(ShipType type, City city, bool useOwnMaterials)
+    public bool OrderShip(ShipType type, City city, bool useOwnMaterials, string customName)
     {
         var calculation = CalculateBuildCost(type, city, useOwnMaterials);
-
         if (!calculation.canBuild) return false;
 
-        // 1. Gold abziehen
         currentGold -= calculation.totalCost;
+        ConsumeMaterials(type.requiredResources, city, useOwnMaterials);
 
-        // 2. Waren entfernen
-        foreach (var req in type.requiredResources)
-        {
-            int needed = req.amount;
-
-            // Erst aus Kontor
-            if (useOwnMaterials)
-            {
-                int inKontor = city.GetKontorStock(req.wareName);
-                int takeFromKontor = Mathf.Min(inKontor, needed);
-
-                city.AddToKontor(req.wareName, -takeFromKontor);
-                needed -= takeFromKontor;
-            }
-
-            // Rest vom Markt
-            if (needed > 0)
-            {
-                city.RemoveMarketStock(req.wareName, needed);
-            }
-        }
-
-        // 3. Auftrag erstellen
         ShipOrder newOrder = new ShipOrder();
-        newOrder.shipName = type.typeName;
+        newOrder.shipName = string.IsNullOrEmpty(customName) ? type.typeName : customName;
         newOrder.type = type;
         newOrder.location = city;
         newOrder.daysLeft = type.buildTimeDays;
+        newOrder.isRepair = false;
+        newOrder.isPlayerShip = true;
 
         buildQueue.Add(newOrder);
-        Debug.Log($"Bau gestartet: {type.typeName} f�r {calculation.totalCost} Gold.");
-
         return true;
     }
 
-    void ProcessQueue(DateTime date, Season season)
+    public bool BuyShipInstant(ShipType type, City city, int totalCost, string customName)
     {
-        for (int i = buildQueue.Count - 1; i >= 0; i--)
-        {
-            ShipOrder order = buildQueue[i];
-            order.daysLeft--;
+        if (currentGold < totalCost) return false;
+        currentGold -= totalCost;
+        SpawnShip(type, city, customName);
+        return true;
+    }
 
-            if (order.daysLeft <= 0)
+    // --- Reparatur Berechnungen ---
+    public (int goldCost, int days, List<ResourceRequirement> requiredMats) CalculateRepairRequirements(Ship ship)
+    {
+        List<ResourceRequirement> mats = new List<ResourceRequirement>();
+        if (ship == null || ship.type == null) return (0, 0, mats);
+
+        float damageRatio = 1.0f - (ship.currentHealth / (float)ship.type.maxHealth);
+        if (damageRatio <= 0.001f) return (0, 0, mats);
+
+        int days = Mathf.CeilToInt(ship.type.buildTimeDays * damageRatio);
+        if (days < 1) days = 1;
+
+        int goldCost = Mathf.CeilToInt(ship.type.baseBuildPrice * 0.2f * damageRatio);
+
+        foreach (var req in ship.type.requiredResources)
+        {
+            ResourceRequirement repairReq = req;
+            repairReq.amount = Mathf.CeilToInt(req.amount * damageRatio * 0.5f); // 50% Effizienz
+            if (repairReq.amount > 0) mats.Add(repairReq);
+        }
+
+        return (goldCost, days, mats);
+    }
+
+    public bool OrderRepair(Ship ship, City city, bool useOwnMaterials, bool layoffCrew)
+    {
+        var reqs = CalculateRepairRequirements(ship);
+
+        int matCostGold = 0;
+        bool missingGoods = false;
+
+        foreach (var mat in reqs.requiredMats)
+        {
+            string wName = mat.wareType.ToString();
+            int needed = mat.amount;
+            if (useOwnMaterials)
             {
-                SpawnShip(order.type, order.location);
-                buildQueue.RemoveAt(i);
+                int inKontor = city.GetKontorStock(wName);
+                if (inKontor >= needed) needed = 0; else needed -= inKontor;
             }
+            if (needed > 0)
+            {
+                if (city.GetMarketStock(wName) >= needed) matCostGold += needed * city.GetPrice(wName, true);
+                else missingGoods = true;
+            }
+        }
+
+        int totalGoldNeeded = reqs.goldCost + matCostGold;
+        if (missingGoods || currentGold < totalGoldNeeded) return false;
+
+        currentGold -= totalGoldNeeded;
+        ConsumeMaterials(reqs.requiredMats, city, useOwnMaterials);
+
+        if (layoffCrew) ship.currentCrew = 0;
+        ship.isUnderRepair = true;
+
+        ShipOrder repairOrder = new ShipOrder();
+        repairOrder.shipName = ship.shipName;
+        repairOrder.existingShip = ship;
+        repairOrder.location = city;
+        repairOrder.daysLeft = reqs.days;
+        repairOrder.isRepair = true;
+        repairOrder.isPlayerShip = true;
+
+        buildQueue.Add(repairOrder);
+        Debug.Log($"Reparatur beauftragt: {ship.shipName}");
+        return true;
+    }
+
+    private void ConsumeMaterials(List<ResourceRequirement> mats, City city, bool useOwn)
+    {
+        foreach (var req in mats)
+        {
+            string wName = req.wareType.ToString();
+            int needed = req.amount;
+            if (useOwn)
+            {
+                int inKontor = city.GetKontorStock(wName);
+                int take = Mathf.Min(inKontor, needed);
+                city.AddToKontor(wName, -take);
+                needed -= take;
+            }
+            if (needed > 0) city.RemoveMarketStock(wName, needed);
         }
     }
 
-    private void SpawnShip(ShipType type, City location)
+    public void SpawnShip(ShipType type, City location, string nameOverride = "")
     {
+        if (location == null) return;
         GameObject newShipObj = Instantiate(shipPrefab, location.transform.position, Quaternion.identity);
         Ship newShip = newShipObj.GetComponent<Ship>();
 
         newShip.type = type;
-        newShip.shipName = type.typeName + " (Neu)";
+        newShip.shipName = string.IsNullOrEmpty(nameOverride) ? (type.typeName + " (Neu)") : nameOverride;
         newShip.currentHealth = type.maxHealth;
         newShip.currentCityLocation = location;
-
-        // HIER WICHTIG: Das Schiff startet mit 0 verbrauchten Slots. 
-        // Die "extraCargoSpace" Variable im Schiff m�sste sp�ter durch ein komplexeres 
-        // "Upgrade"-System ersetzt werden, wenn du Waffen/Segel einbaust.
-        newShip.extraCargoSpace = 0;
+        newShip.currentCrew = 0;
 
         if (selectedShip == null) selectedShip = newShip;
     }
 
-    // ------------------------------------------------------------
-    // 2. EXISTIERENDE HANDELS-FUNKTIONEN
-    // ------------------------------------------------------------
-    public int GetGold() { return currentGold; }
-    public int GetStock(string ware) { return selectedShip != null ? selectedShip.GetStock(ware) : 0; }
+    // ============================================================
+    // 2. HANDEL & LOGISTIK (FIX: JETZT MIT ÜBERLADUNGEN)
+    // ============================================================
 
-    public bool TryBuyFromCity(City city, string wareName, int amount, int unitPrice)
+    public int GetStock(string ware)
     {
-        if (selectedShip == null) return false;
-        if (currentGold < amount * unitPrice) return false;
+        if (selectedShip == null) return 0;
+        return selectedShip.GetStock(ware);
+    }
+
+    // Markt -> Schiff (Kaufen) - HAUPTMETHODE
+    public bool TryBuyFromCity(City city, string ware, int amount)
+    {
+        if (selectedShip == null || city == null) return false;
+
+        int price = city.GetPrice(ware, true);
+        int cost = price * amount;
+
+        if (currentGold < cost) return false;
+        if (city.GetMarketStock(ware) < amount) return false;
         if (selectedShip.currentCargoLoad + amount > selectedShip.GetMaxCargo()) return false;
-        if (city.GetMarketStock(wareName) < amount) return false;
 
-        currentGold -= amount * unitPrice;
-        selectedShip.AddCargo(wareName, amount);
-        city.RemoveMarketStock(wareName, amount);
-        return true;
-    }
-
-    public bool TrySellToCity(City city, string wareName, int amount, int unitPrice)
-    {
-        if (selectedShip == null || selectedShip.GetStock(wareName) < amount) return false;
-        currentGold += amount * unitPrice;
-        selectedShip.RemoveCargo(wareName, amount);
-        city.AddMarketStock(wareName, amount);
-        return true;
-    }
-
-    public bool TransferToKontor(City city, string wareName, int amount)
-    {
-        if (selectedShip == null || selectedShip.GetStock(wareName) < amount) return false;
-        selectedShip.RemoveCargo(wareName, amount);
-        city.AddToKontor(wareName, amount);
-        return true;
-    }
-
-    public bool TransferToShip(City city, string wareName, int amount)
-    {
-        if (selectedShip == null || city.GetKontorStock(wareName) < amount) return false;
-        if (selectedShip.currentCargoLoad + amount > selectedShip.GetMaxCargo()) return false;
-        city.AddToKontor(wareName, -amount);
-        selectedShip.AddCargo(wareName, amount);
-        return true;
-    }
-
-    // Platzhalter / Legacy Support
-    public bool BuyShipInstant(ShipType type, City location) { return false; }
-    public bool TryRepairShip()
-    {
-        if (selectedShip == null) return false;
-        int cost = selectedShip.CalculateRepairCost();
-        if (cost <= 0 || currentGold < cost) return false;
         currentGold -= cost;
-        selectedShip.Repair();
+        city.RemoveMarketStock(ware, amount);
+        selectedShip.AddCargo(ware, amount);
+
         return true;
     }
-    public void RenameShip(string newName) { if (selectedShip != null) selectedShip.shipName = newName; }
+
+    // Schiff -> Markt (Verkaufen) - HAUPTMETHODE
+    public bool TrySellToCity(City city, string ware, int amount)
+    {
+        if (selectedShip == null || city == null) return false;
+        if (selectedShip.GetStock(ware) < amount) return false;
+
+        int price = city.GetPrice(ware, false);
+        int revenue = price * amount;
+
+        selectedShip.RemoveCargo(ware, amount);
+        city.RemoveMarketStock(ware, -amount); // Negativ entfernen = Hinzufügen
+
+        currentGold += revenue;
+        return true;
+    }
+
+    // --- NEU: OVERLOADS FÜR 4 PARAMETER (FIX FÜR MARKETROW) ---
+    // Diese Methoden fangen den Aufruf mit dem Preis ab und leiten ihn weiter.
+    public bool TryBuyFromCity(City city, string ware, int amount, int explicitPrice)
+    {
+        return TryBuyFromCity(city, ware, amount);
+    }
+
+    public bool TrySellToCity(City city, string ware, int amount, int explicitPrice)
+    {
+        return TrySellToCity(city, ware, amount);
+    }
+
+    // Kontor -> Schiff
+    public bool TransferToShip(City city, string ware, int amount)
+    {
+        if (selectedShip == null || city == null) return false;
+        if (city.GetKontorStock(ware) < amount) return false;
+        if (selectedShip.currentCargoLoad + amount > selectedShip.GetMaxCargo()) return false;
+
+        city.AddToKontor(ware, -amount);
+        selectedShip.AddCargo(ware, amount);
+        return true;
+    }
+
+    // Schiff -> Kontor
+    public bool TransferToKontor(City city, string ware, int amount)
+    {
+        if (selectedShip == null || city == null) return false;
+        if (selectedShip.GetStock(ware) < amount) return false;
+
+        selectedShip.RemoveCargo(ware, amount);
+        city.AddToKontor(ware, amount);
+        return true;
+    }
+
+    // ============================================================
+    // 3. LEGACY & HELPER
+    // ============================================================
+
+    public int CalculateSellPrice()
+    {
+        if (selectedShip == null) return 0;
+        float healthPercent = (float)selectedShip.currentHealth / (float)selectedShip.type.maxHealth;
+        float baseValue = (float)selectedShip.type.baseBuildPrice;
+        return Mathf.FloorToInt(baseValue * 0.5f * healthPercent);
+    }
+
+    public bool SellShip()
+    {
+        if (selectedShip == null) return false;
+        int price = CalculateSellPrice();
+        currentGold += price;
+        Destroy(selectedShip.gameObject);
+        selectedShip = null;
+        return true;
+    }
+
+    public void RenameShip(string n) { if (selectedShip) selectedShip.shipName = n; }
+    public int GetGold() => currentGold;
 }

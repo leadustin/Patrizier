@@ -11,18 +11,37 @@ public enum Season
 
 public enum WareType
 {
-    Holz,
-    Ziegel,
+    // --- 1. GRUNDWAREN (Nahrungsmittel) ---
     Getreide,
+    Mehl,
+    Brot,
     Fisch,
+    Fleisch,
+    Honig,
     Bier,
-    Tuch,
-    Eisen,
     Salz,
+
+    // --- 2. ROHSTOFFE ---
+    Holz,   // Baumstämme (für Produktion & Bau)
+    Erz,    // Eisenerz
+    Wolle,  // Schafswolle
+    Hanf,   // Für Taue/Segel
+    Ton,    // Für Ziegel
+
+    // --- 3. WEITERVERARBEITET (Handwerk / Industrie) ---
+    Bretter,    // Aus Holz (Sägewerk)
+    Eisenwaren, // Aus Erz (Schmiede) - Werkzeuge/Waffen
+    Stoff,      // Aus Wolle (Weberei)
+    Leder,      // Aus Häuten/Fleischproduktion? (Gerberei)
+    Pech,       // Aus Holz/Harz (Pechsiederei)
+    Ziegel,     // Aus Ton (Ziegelei)
+
+    // --- 4. LUXUSWAREN (Reiche Bürger) ---
+    Gewuerze,
     Wein,
-    Wolle,
-    Felle,
-    Honig
+    Schmuck,
+    Samt,
+    Pelze
 }
 
 public enum WeaponSize
