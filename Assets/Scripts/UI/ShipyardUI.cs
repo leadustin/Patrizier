@@ -27,9 +27,10 @@ public class ShipyardUI : MonoBehaviour
 
     // Speicher für Transaktionen
     private ShipType pendingType;
-    private Ship pendingRepairShip;
+    private Ship pendingShip; // Für Reparatur ODER Verkauf
     private bool pendingIsBuy;
     private bool pendingIsRepair;
+    private bool pendingIsSell; // NEU
     private int pendingCost;
     private bool pendingUseOwnMats;
     private bool pendingLayoffCrew;
@@ -57,42 +58,61 @@ public class ShipyardUI : MonoBehaviour
     public TextMeshProUGUI buyPriceText;
     public Button buyActionBtn;
 
-    // ========================================================
-    // --- REPAIR TAB (STRUKTUR & LISTE & DETAILS) ---
-    // ========================================================
-
+    // --- REPAIR TAB ---
     [Header("--- UI REPAIR TAB (Struktur) ---")]
-    public GameObject repairListView;    // Container Liste
-    public GameObject repairDetailView;  // Container Details
+    public GameObject repairListView;
+    public GameObject repairDetailView;
 
     [Header("--- UI REPAIR (Listenansicht) ---")]
-    public Transform repairListContent;     // ScrollView Content
-    public GameObject repairListItemPrefab; // Button Prefab
-    public TextMeshProUGUI repairEmptyText; // "Keine Schiffe..."
+    public Transform repairListContent;
+    public GameObject repairListItemPrefab;
+    public TextMeshProUGUI repairEmptyText;
 
     [Header("--- UI REPAIR (Detailansicht) ---")]
     public Image repairShipImage;
     public TextMeshProUGUI repairShipNameText;
-
-    // Stats
     public TextMeshProUGUI repairStatHealth;
     public TextMeshProUGUI repairStatCrew;
-
-    // Rechts: Kosten & Material
     public List<GameObject> repairMaterialSlots;
     public TextMeshProUGUI repairMaterialCostText;
     public TextMeshProUGUI repairTotalCostText;
     public TextMeshProUGUI repairTimeText;
-
-    // Toggles
     public Toggle repairOwnMaterialsToggle;
     public Toggle repairLayoffCrewToggle;
     public TextMeshProUGUI repairWageWarningText;
-
-    public Button repairActionBtn;   // "Reparatur beauftragen"
-    public Button repairBackBtn;     // "Zurück"
-
+    public Button repairActionBtn;
+    public Button repairBackBtn;
     private Ship currentDetailShip;
+
+    // ========================================================
+    // --- SELL TAB (NEU) ---
+    // ========================================================
+    [Header("--- UI SELL TAB (Struktur) ---")]
+    public GameObject sellListView;
+    public GameObject sellDetailView;
+
+    [Header("--- UI SELL (Listenansicht) ---")]
+    public Transform sellListContent;
+    public GameObject sellListItemPrefab; // Kann dasselbe sein wie Repair
+    public TextMeshProUGUI sellEmptyText;
+
+    [Header("--- UI SELL (Detailansicht) ---")]
+    public Image sellShipImage;
+    public TextMeshProUGUI sellShipNameText;
+    public TextMeshProUGUI sellStatHealth;
+    public TextMeshProUGUI sellStatCargo; // Anzeige Fracht
+    public TextMeshProUGUI sellPriceText; // "Wert: 1500"
+
+    // Buttons für "Zustand A: Leer"
+    public Button sellActionBtn; // "Verkaufen"
+
+    // Buttons für "Zustand B: Fracht"
+    public Button sellBulkToKontorBtn; // "Alles ins Kontor"
+    public Button sellBulkToMarketBtn; // "Alles verkaufen"
+    public TextMeshProUGUI sellCargoWarningText; // "Laderaum muss leer sein!"
+
+    public Button sellBackBtn;
+    private Ship currentSellShip;
 
 
     // --- QUEUE & GENERIC ---
@@ -107,12 +127,17 @@ public class ShipyardUI : MonoBehaviour
         if (confirmPopup) confirmPopup.SetActive(false);
         if (popupCancelBtn) popupCancelBtn.onClick.AddListener(ClosePopup);
 
+        // Listener
         if (buildOwnMaterialsToggle) buildOwnMaterialsToggle.onValueChanged.AddListener(delegate { UpdateBuildUI(false); });
 
         if (repairOwnMaterialsToggle) repairOwnMaterialsToggle.onValueChanged.AddListener(delegate { UpdateRepairDetailView(); });
         if (repairLayoffCrewToggle) repairLayoffCrewToggle.onValueChanged.AddListener(delegate { UpdateRepairDetailView(); });
-
         if (repairBackBtn) repairBackBtn.onClick.AddListener(SwitchToRepairList);
+
+        // SELL Listener
+        if (sellBackBtn) sellBackBtn.onClick.AddListener(SwitchToSellList);
+        if (sellBulkToKontorBtn) sellBulkToKontorBtn.onClick.AddListener(OnBulkToKontorClicked);
+        if (sellBulkToMarketBtn) sellBulkToMarketBtn.onClick.AddListener(OnBulkToMarketClicked);
     }
 
     private void Update()
@@ -124,14 +149,10 @@ public class ShipyardUI : MonoBehaviour
     public void ShowArea_Build() { ActivateArea(buildArea); UpdateBuildUI(true); }
     public void ShowArea_Buy() { ActivateArea(buyArea); UpdateBuyUI(true); }
     public void ShowArea_Queue() { ActivateArea(queueArea); UpdateQueueUI(); }
+    public void ShowArea_Repair() { ActivateArea(repairArea); SwitchToRepairList(); }
+    public void ShowArea_Sell() { ActivateArea(sellArea); SwitchToSellList(); } // NEU
 
-    public void ShowArea_Repair()
-    {
-        ActivateArea(repairArea);
-        SwitchToRepairList();
-    }
-
-    public void ShowArea_Sell() { ActivateArea(sellArea); UpdateSellUI(); }
+    // (Upgrade Area später...)
     public void ShowArea_Upgrade() { ActivateArea(upgradeArea); }
 
     private void ActivateArea(GameObject areaToActive)
@@ -148,21 +169,19 @@ public class ShipyardUI : MonoBehaviour
     }
 
     // ========================================================
-    // REPAIR UI: LIST VIEW LOGIK
+    // REPAIR UI
     // ========================================================
 
     private void SwitchToRepairList()
     {
         if (repairListView) repairListView.SetActive(true);
         if (repairDetailView) repairDetailView.SetActive(false);
-
         GenerateRepairList();
     }
 
     private void GenerateRepairList()
     {
         foreach (Transform child in repairListContent) Destroy(child.gameObject);
-
         City currentCity = UIManager.Instance?.currentCity;
         if (currentCity == null) return;
 
@@ -172,62 +191,32 @@ public class ShipyardUI : MonoBehaviour
         foreach (Ship s in allShips)
         {
             if (s.currentCityLocation == currentCity && s.currentHealth < s.type.maxHealth && !s.isUnderRepair)
-            {
                 candidates.Add(s);
-            }
         }
 
-        if (candidates.Count == 0)
-        {
-            if (repairEmptyText) repairEmptyText.gameObject.SetActive(true);
-        }
+        if (candidates.Count == 0 && repairEmptyText) repairEmptyText.gameObject.SetActive(true);
         else
         {
             if (repairEmptyText) repairEmptyText.gameObject.SetActive(false);
-
-            foreach (Ship s in candidates)
-            {
-                if (repairListItemPrefab)
-                {
-                    GameObject itemObj = Instantiate(repairListItemPrefab, repairListContent);
-
-                    TextMeshProUGUI[] texts = itemObj.GetComponentsInChildren<TextMeshProUGUI>();
-                    if (texts.Length > 0) texts[0].text = s.shipName;
-                    if (texts.Length > 1) texts[1].text = $"{Mathf.CeilToInt(s.currentHealth)}/{s.type.maxHealth} HP";
-
-                    Button btn = itemObj.GetComponent<Button>();
-                    if (btn == null) btn = itemObj.GetComponentInChildren<Button>();
-
-                    if (btn)
-                    {
-                        btn.onClick.AddListener(() => SwitchToRepairDetail(s));
-                    }
-                }
-            }
+            foreach (Ship s in candidates) CreateListItem(s, repairListContent, repairListItemPrefab, true);
         }
     }
-
-    // ========================================================
-    // REPAIR UI: DETAIL VIEW LOGIK
-    // ========================================================
 
     private void SwitchToRepairDetail(Ship ship)
     {
         currentDetailShip = ship;
-
         if (repairListView) repairListView.SetActive(false);
         if (repairDetailView) repairDetailView.SetActive(true);
 
         if (repairOwnMaterialsToggle) repairOwnMaterialsToggle.isOn = false;
         if (repairLayoffCrewToggle) repairLayoffCrewToggle.isOn = false;
-
         UpdateRepairDetailView();
     }
 
     private void UpdateRepairDetailView()
     {
         if (currentDetailShip == null) { SwitchToRepairList(); return; }
-
+        // (Hier steht dein vorhandener Repair-Code... Ich kürze es für die Übersicht nicht ab, sondern füge es ein)
         Ship ship = currentDetailShip;
         City city = UIManager.Instance?.currentCity;
         bool useOwn = repairOwnMaterialsToggle != null && repairOwnMaterialsToggle.isOn;
@@ -235,45 +224,37 @@ public class ShipyardUI : MonoBehaviour
 
         if (repairShipNameText) repairShipNameText.text = ship.shipName;
         if (repairShipImage) repairShipImage.sprite = ship.type.icon;
-
-        if (repairStatHealth) repairStatHealth.text = $"Zustand: {Mathf.CeilToInt(ship.currentHealth)} / {ship.type.maxHealth}";
-        if (repairStatCrew) repairStatCrew.text = $"Crew: {ship.currentCrew} / {ship.type.maxCrew}";
+        if (repairStatHealth) repairStatHealth.text = $"{Mathf.CeilToInt(ship.currentHealth)} / {ship.type.maxHealth}";
+        if (repairStatCrew) repairStatCrew.text = $"{ship.currentCrew} / {ship.type.maxCrew}";
 
         var reqs = PlayerManager.Instance.CalculateRepairRequirements(ship);
 
         foreach (var slot in repairMaterialSlots) if (slot != null) slot.SetActive(false);
         int matCostGold = 0;
-
         for (int i = 0; i < reqs.requiredMats.Count; i++)
         {
             if (i >= repairMaterialSlots.Count) break;
             GameObject slotObj = repairMaterialSlots[i];
             var req = reqs.requiredMats[i];
             string wName = req.wareType.ToString();
-
             slotObj.SetActive(true);
             Image iconImg = slotObj.transform.Find("Icon")?.GetComponent<Image>();
             TextMeshProUGUI amountTxt = slotObj.transform.Find("AmountText")?.GetComponent<TextMeshProUGUI>();
-
             if (iconImg) iconImg.sprite = req.icon;
-
             int inKontor = city.GetKontorStock(wName);
             int inMarket = city.GetMarketStock(wName);
             int stock = useOwn ? (inKontor + inMarket) : inMarket;
-
             if (amountTxt)
             {
                 amountTxt.text = $"{req.amount}";
                 amountTxt.color = stock >= req.amount ? Color.white : Color.red;
             }
-
             int neededToBuy = req.amount;
             if (useOwn) neededToBuy = Mathf.Max(0, neededToBuy - inKontor);
             matCostGold += neededToBuy * city.GetPrice(wName, true);
         }
 
         int totalGold = reqs.goldCost + matCostGold;
-
         if (repairMaterialCostText) repairMaterialCostText.text = $"Materialzukauf: {matCostGold}";
         if (repairTotalCostText) repairTotalCostText.text = $"Gesamt: {totalGold}";
         if (repairTimeText) repairTimeText.text = $"Dauer: {reqs.days} Tage";
@@ -281,24 +262,150 @@ public class ShipyardUI : MonoBehaviour
         if (repairWageWarningText)
         {
             if (layoff) repairWageWarningText.text = "Crew wird entlassen (0 G/Tag)";
-            else
-            {
-                int dailyWage = ship.currentCrew * 1;
-                repairWageWarningText.text = $"Heuer läuft weiter (ca. {dailyWage} G/Tag)";
-            }
+            else repairWageWarningText.text = "Heuer läuft weiter";
         }
 
         if (repairActionBtn)
         {
             bool canAfford = PlayerManager.Instance.currentGold >= totalGold;
             repairActionBtn.interactable = canAfford;
-
             repairActionBtn.onClick.RemoveAllListeners();
-            repairActionBtn.onClick.AddListener(() => {
-                OpenConfirmPopupRepair(ship, totalGold, useOwn, layoff);
-            });
+            repairActionBtn.onClick.AddListener(() => OpenConfirmPopupRepair(ship, totalGold, useOwn, layoff));
         }
     }
+
+    // ========================================================
+    // SELL UI (NEU)
+    // ========================================================
+
+    private void SwitchToSellList()
+    {
+        if (sellListView) sellListView.SetActive(true);
+        if (sellDetailView) sellDetailView.SetActive(false);
+        GenerateSellList();
+    }
+
+    private void GenerateSellList()
+    {
+        foreach (Transform child in sellListContent) Destroy(child.gameObject);
+        City currentCity = UIManager.Instance?.currentCity;
+        if (currentCity == null) return;
+
+        Ship[] allShips = FindObjectsOfType<Ship>();
+        List<Ship> candidates = new List<Ship>();
+
+        foreach (Ship s in allShips)
+        {
+            // Alle meine Schiffe in dieser Stadt (egal ob kaputt oder heile)
+            if (s.currentCityLocation == currentCity && !s.isUnderRepair)
+                candidates.Add(s);
+        }
+
+        if (candidates.Count == 0 && sellEmptyText) sellEmptyText.gameObject.SetActive(true);
+        else
+        {
+            if (sellEmptyText) sellEmptyText.gameObject.SetActive(false);
+            // Nutze gleiches Prefab oder ein eigenes
+            GameObject prefab = sellListItemPrefab != null ? sellListItemPrefab : repairListItemPrefab;
+            foreach (Ship s in candidates) CreateListItem(s, sellListContent, prefab, false);
+        }
+    }
+
+    // Helper für Liste (DRY)
+    private void CreateListItem(Ship s, Transform parent, GameObject prefab, bool isRepair)
+    {
+        if (!prefab) return;
+        GameObject itemObj = Instantiate(prefab, parent);
+        TextMeshProUGUI[] texts = itemObj.GetComponentsInChildren<TextMeshProUGUI>();
+
+        if (texts.Length > 0) texts[0].text = s.shipName;
+        // Für Verkauf zeigen wir den Wert an, für Reparatur die HP
+        if (texts.Length > 1)
+        {
+            if (isRepair) texts[1].text = $"{Mathf.CeilToInt(s.currentHealth)} HP";
+            else texts[1].text = $"{PlayerManager.Instance.CalculateSellValue(s)} Gold";
+        }
+
+        Button btn = itemObj.GetComponent<Button>() ?? itemObj.GetComponentInChildren<Button>();
+        if (btn)
+        {
+            if (isRepair) btn.onClick.AddListener(() => SwitchToRepairDetail(s));
+            else btn.onClick.AddListener(() => SwitchToSellDetail(s));
+        }
+    }
+
+    private void SwitchToSellDetail(Ship ship)
+    {
+        currentSellShip = ship;
+        if (sellListView) sellListView.SetActive(false);
+        if (sellDetailView) sellDetailView.SetActive(true);
+        UpdateSellDetailView();
+    }
+
+    private void UpdateSellDetailView()
+    {
+        if (currentSellShip == null) { SwitchToSellList(); return; }
+
+        Ship ship = currentSellShip;
+        int value = PlayerManager.Instance.CalculateSellValue(ship);
+        bool hasCargo = ship.currentCargoLoad > 0;
+
+        if (sellShipNameText) sellShipNameText.text = ship.shipName;
+        if (sellShipImage) sellShipImage.sprite = ship.type.icon;
+
+        if (sellStatHealth) sellStatHealth.text = $"Zustand: {Mathf.CeilToInt(ship.currentHealth)} / {ship.type.maxHealth}";
+        if (sellStatCargo) sellStatCargo.text = $"Fracht: {ship.currentCargoLoad} / {ship.GetMaxCargo()}";
+        if (sellPriceText) sellPriceText.text = $"Wert: {value} Gold";
+
+        // --- ZUSTAND A: Fracht an Bord ---
+        if (hasCargo)
+        {
+            if (sellActionBtn) sellActionBtn.gameObject.SetActive(false); // Verstecken
+
+            if (sellBulkToKontorBtn) sellBulkToKontorBtn.gameObject.SetActive(true);
+            if (sellBulkToMarketBtn) sellBulkToMarketBtn.gameObject.SetActive(true);
+            if (sellCargoWarningText)
+            {
+                sellCargoWarningText.gameObject.SetActive(true);
+                sellCargoWarningText.text = "Laderaum muss leer sein!";
+            }
+        }
+        // --- ZUSTAND B: Schiff leer ---
+        else
+        {
+            if (sellActionBtn)
+            {
+                sellActionBtn.gameObject.SetActive(true);
+                sellActionBtn.interactable = true;
+                sellActionBtn.onClick.RemoveAllListeners();
+                sellActionBtn.onClick.AddListener(() => OpenConfirmPopupSell(ship, value));
+            }
+
+            if (sellBulkToKontorBtn) sellBulkToKontorBtn.gameObject.SetActive(false);
+            if (sellBulkToMarketBtn) sellBulkToMarketBtn.gameObject.SetActive(false);
+            if (sellCargoWarningText) sellCargoWarningText.gameObject.SetActive(false);
+        }
+    }
+
+    private void OnBulkToKontorClicked()
+    {
+        if (currentSellShip != null)
+        {
+            PlayerManager.Instance.TransferAllCargoToKontor(currentSellShip, UIManager.Instance.currentCity);
+            UpdateSellDetailView(); // UI aktualisieren (Buttons tauschen)
+        }
+    }
+
+    private void OnBulkToMarketClicked()
+    {
+        if (currentSellShip != null)
+        {
+            PlayerManager.Instance.SellAllCargoToCity(currentSellShip, UIManager.Instance.currentCity);
+            UIManager.Instance.UpdateGoldDisplay();
+            UpdateSellDetailView();
+        }
+    }
+
 
     // ========================================================
     // POPUP LOGIK
@@ -308,6 +415,7 @@ public class ShipyardUI : MonoBehaviour
     {
         pendingType = type;
         pendingIsRepair = false;
+        pendingIsSell = false;
         pendingCost = cost;
         pendingIsBuy = isInstantBuy;
         pendingUseOwnMats = useOwnMats;
@@ -317,18 +425,29 @@ public class ShipyardUI : MonoBehaviour
 
     private void OpenConfirmPopupRepair(Ship ship, int cost, bool useOwnMats, bool layoffCrew)
     {
-        pendingRepairShip = ship;
+        pendingShip = ship; // Generic pending ship
         pendingIsRepair = true;
+        pendingIsSell = false;
         pendingCost = cost;
         pendingUseOwnMats = useOwnMats;
         pendingLayoffCrew = layoffCrew;
         SetupPopupUI("Reparaturauftrag", ship.shipName, ship.type.typeName, cost);
     }
 
+    private void OpenConfirmPopupSell(Ship ship, int value)
+    {
+        pendingShip = ship;
+        pendingIsRepair = false;
+        pendingIsSell = true;
+        pendingCost = value; // Hier ist Cost = Erlös
+        SetupPopupUI("Schiff verkaufen", ship.shipName, ship.type.typeName, value);
+    }
+
     private void SetupPopupUI(string actionTitle, string name, string typeName, int cost)
     {
+        string priceLabel = pendingIsSell ? "Erlös" : "Preis";
         if (popupInfoText)
-            popupInfoText.text = $"<b>{actionTitle} bestätigen</b>\n\nSchiff: {name}\nTyp: {typeName}\nPreis: {cost} Gold";
+            popupInfoText.text = $"<b>{actionTitle} bestätigen</b>\n\nSchiff: {name}\nTyp: {typeName}\n{priceLabel}: {cost} Gold";
 
         if (popupConfirmBtn)
         {
@@ -344,9 +463,13 @@ public class ShipyardUI : MonoBehaviour
     {
         bool success = false;
 
-        if (pendingIsRepair)
+        if (pendingIsSell)
         {
-            success = PlayerManager.Instance.OrderRepair(pendingRepairShip, UIManager.Instance.currentCity, pendingUseOwnMats, pendingLayoffCrew);
+            success = PlayerManager.Instance.SellShip(pendingShip);
+        }
+        else if (pendingIsRepair)
+        {
+            success = PlayerManager.Instance.OrderRepair(pendingShip, UIManager.Instance.currentCity, pendingUseOwnMats, pendingLayoffCrew);
         }
         else if (pendingIsBuy)
         {
@@ -364,17 +487,15 @@ public class ShipyardUI : MonoBehaviour
             UIManager.Instance.UpdateGoldDisplay();
             ClosePopup();
 
-            if (pendingIsRepair)
-            {
-                SwitchToRepairList();
-            }
+            if (pendingIsSell) SwitchToSellList();
+            else if (pendingIsRepair) SwitchToRepairList();
             else if (pendingIsBuy) UpdateBuyUI(false);
             else ShowArea_Queue();
         }
     }
 
     // ========================================================
-    // BUILD & BUY & QUEUE
+    // BUILD & BUY & QUEUE (Standard Logik)
     // ========================================================
 
     private void UpdateBuildUI(bool resetName = false)
@@ -514,37 +635,5 @@ public class ShipyardUI : MonoBehaviour
         }
     }
 
-    private void UpdateSellUI()
-    {
-        Ship ship = PlayerManager.Instance.selectedShip;
-        if (ship == null)
-        {
-            if (genericInfoText) genericInfoText.text = "Kein Schiff ausgewählt.";
-            if (genericCostText) genericCostText.text = "";
-            if (genericActionButton) genericActionButton.interactable = false;
-            return;
-        }
-
-        float rawPrice = (float)PlayerManager.Instance.CalculateSellPrice();
-        int sellPrice = Mathf.FloorToInt(rawPrice);
-
-        if (genericInfoText) genericInfoText.text = $"Möchten Sie die '{ship.shipName}' wirklich verkaufen?";
-        if (genericCostText) genericCostText.text = $"Erlös: {sellPrice} Gold";
-
-        if (genericActionButton)
-        {
-            genericActionButton.interactable = true;
-            TextMeshProUGUI btnText = genericActionButton.GetComponentInChildren<TextMeshProUGUI>();
-            if (btnText) btnText.text = "Verkaufen";
-
-            genericActionButton.onClick.RemoveAllListeners();
-            genericActionButton.onClick.AddListener(() => {
-                if (PlayerManager.Instance.SellShip())
-                {
-                    UIManager.Instance.UpdateGoldDisplay();
-                    ShowArea_Build();
-                }
-            });
-        }
-    }
+    // Die alte Sell-Logik haben wir entfernt, da sie durch den neuen Tab ersetzt wurde
 }

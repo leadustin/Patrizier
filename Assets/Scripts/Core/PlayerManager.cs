@@ -7,13 +7,12 @@ using System.Linq;
 public class ShipOrder
 {
     public string shipName;
-    public ShipType type;      // Für Neubau
-    public Ship existingShip;  // Für Reparatur
+    public ShipType type;
+    public Ship existingShip;
     public int daysLeft;
     public City location;
-
-    public bool isRepair;      // Unterscheidung Bau vs. Reparatur
-    public bool isPlayerShip;  // Für KI-Konkurrenz
+    public bool isRepair;
+    public bool isPlayerShip;
 }
 
 public class PlayerManager : MonoBehaviour
@@ -86,7 +85,6 @@ public class PlayerManager : MonoBehaviour
         {
             order.existingShip.currentHealth = order.existingShip.type.maxHealth;
             order.existingShip.isUnderRepair = false;
-            // Falls Mannschaft entlassen wurde, ist sie jetzt 0 (wurde beim OrderRepair schon gesetzt)
             Debug.Log($"Reparatur abgeschlossen: {order.shipName}");
         }
         else if (!order.isRepair)
@@ -95,7 +93,6 @@ public class PlayerManager : MonoBehaviour
         }
     }
 
-    // --- Neubau Berechnungen ---
     public (int totalCost, bool canBuild) CalculateBuildCost(ShipType type, City city, bool useOwnMaterials)
     {
         int materialCost = 0;
@@ -148,7 +145,6 @@ public class PlayerManager : MonoBehaviour
         return true;
     }
 
-    // --- Reparatur Berechnungen ---
     public (int goldCost, int days, List<ResourceRequirement> requiredMats) CalculateRepairRequirements(Ship ship)
     {
         List<ResourceRequirement> mats = new List<ResourceRequirement>();
@@ -165,7 +161,7 @@ public class PlayerManager : MonoBehaviour
         foreach (var req in ship.type.requiredResources)
         {
             ResourceRequirement repairReq = req;
-            repairReq.amount = Mathf.CeilToInt(req.amount * damageRatio * 0.5f); // 50% Effizienz
+            repairReq.amount = Mathf.CeilToInt(req.amount * damageRatio * 0.5f);
             if (repairReq.amount > 0) mats.Add(repairReq);
         }
 
@@ -175,7 +171,6 @@ public class PlayerManager : MonoBehaviour
     public bool OrderRepair(Ship ship, City city, bool useOwnMaterials, bool layoffCrew)
     {
         var reqs = CalculateRepairRequirements(ship);
-
         int matCostGold = 0;
         bool missingGoods = false;
 
@@ -213,7 +208,6 @@ public class PlayerManager : MonoBehaviour
         repairOrder.isPlayerShip = true;
 
         buildQueue.Add(repairOrder);
-        Debug.Log($"Reparatur beauftragt: {ship.shipName}");
         return true;
     }
 
@@ -245,25 +239,18 @@ public class PlayerManager : MonoBehaviour
         newShip.currentHealth = type.maxHealth;
         newShip.currentCityLocation = location;
         newShip.currentCrew = 0;
-
         if (selectedShip == null) selectedShip = newShip;
     }
 
     // ============================================================
-    // 2. HANDEL & LOGISTIK (FIX: JETZT MIT ÜBERLADUNGEN)
+    // 2. HANDEL & LOGISTIK
     // ============================================================
 
-    public int GetStock(string ware)
-    {
-        if (selectedShip == null) return 0;
-        return selectedShip.GetStock(ware);
-    }
+    public int GetStock(string ware) { return selectedShip ? selectedShip.GetStock(ware) : 0; }
 
-    // Markt -> Schiff (Kaufen) - HAUPTMETHODE
     public bool TryBuyFromCity(City city, string ware, int amount)
     {
         if (selectedShip == null || city == null) return false;
-
         int price = city.GetPrice(ware, true);
         int cost = price * amount;
 
@@ -274,11 +261,9 @@ public class PlayerManager : MonoBehaviour
         currentGold -= cost;
         city.RemoveMarketStock(ware, amount);
         selectedShip.AddCargo(ware, amount);
-
         return true;
     }
 
-    // Schiff -> Markt (Verkaufen) - HAUPTMETHODE
     public bool TrySellToCity(City city, string ware, int amount)
     {
         if (selectedShip == null || city == null) return false;
@@ -288,25 +273,15 @@ public class PlayerManager : MonoBehaviour
         int revenue = price * amount;
 
         selectedShip.RemoveCargo(ware, amount);
-        city.RemoveMarketStock(ware, -amount); // Negativ entfernen = Hinzufügen
+        city.RemoveMarketStock(ware, -amount);
 
         currentGold += revenue;
         return true;
     }
 
-    // --- NEU: OVERLOADS FÜR 4 PARAMETER (FIX FÜR MARKETROW) ---
-    // Diese Methoden fangen den Aufruf mit dem Preis ab und leiten ihn weiter.
-    public bool TryBuyFromCity(City city, string ware, int amount, int explicitPrice)
-    {
-        return TryBuyFromCity(city, ware, amount);
-    }
+    public bool TryBuyFromCity(City city, string ware, int amount, int explicitPrice) => TryBuyFromCity(city, ware, amount);
+    public bool TrySellToCity(City city, string ware, int amount, int explicitPrice) => TrySellToCity(city, ware, amount);
 
-    public bool TrySellToCity(City city, string ware, int amount, int explicitPrice)
-    {
-        return TrySellToCity(city, ware, amount);
-    }
-
-    // Kontor -> Schiff
     public bool TransferToShip(City city, string ware, int amount)
     {
         if (selectedShip == null || city == null) return false;
@@ -318,7 +293,6 @@ public class PlayerManager : MonoBehaviour
         return true;
     }
 
-    // Schiff -> Kontor
     public bool TransferToKontor(City city, string ware, int amount)
     {
         if (selectedShip == null || city == null) return false;
@@ -330,27 +304,62 @@ public class PlayerManager : MonoBehaviour
     }
 
     // ============================================================
-    // 3. LEGACY & HELPER
+    // 3. VERKAUF & MASSEN-LOGISTIK
     // ============================================================
 
-    public int CalculateSellPrice()
+    public int CalculateSellValue(Ship ship)
     {
-        if (selectedShip == null) return 0;
-        float healthPercent = (float)selectedShip.currentHealth / (float)selectedShip.type.maxHealth;
-        float baseValue = (float)selectedShip.type.baseBuildPrice;
-        return Mathf.FloorToInt(baseValue * 0.5f * healthPercent);
+        if (ship == null || ship.type == null) return 0;
+        float healthPercent = (float)ship.currentHealth / (float)ship.type.maxHealth;
+        float baseValue = (float)ship.type.baseBuildPrice * 0.5f;
+        return Mathf.FloorToInt(baseValue * healthPercent);
     }
 
-    public bool SellShip()
+    public bool SellShip(Ship ship)
     {
-        if (selectedShip == null) return false;
-        int price = CalculateSellPrice();
+        if (ship == null) return false;
+        if (ship.currentCargoLoad > 0) return false;
+
+        int price = CalculateSellValue(ship);
         currentGold += price;
-        Destroy(selectedShip.gameObject);
-        selectedShip = null;
+        if (selectedShip == ship) selectedShip = null;
+
+        Destroy(ship.gameObject);
+        Debug.Log($"Schiff verkauft für {price}");
         return true;
     }
 
+    public void TransferAllCargoToKontor(Ship ship, City city)
+    {
+        if (ship == null || city == null) return;
+        var wares = new List<string>(ship.cargo.Keys);
+        foreach (var w in wares)
+        {
+            int amount = ship.cargo[w];
+            if (amount > 0) { city.AddToKontor(w, amount); ship.RemoveCargo(w, amount); }
+        }
+    }
+
+    public void SellAllCargoToCity(Ship ship, City city)
+    {
+        if (ship == null || city == null) return;
+        var wares = new List<string>(ship.cargo.Keys);
+        foreach (var w in wares)
+        {
+            int amount = ship.cargo[w];
+            if (amount > 0)
+            {
+                int price = city.GetPrice(w, false);
+                int revenue = amount * price;
+                city.RemoveMarketStock(w, -amount);
+                ship.RemoveCargo(w, amount);
+                currentGold += revenue;
+            }
+        }
+    }
+
+    public int CalculateSellPrice() => CalculateSellValue(selectedShip);
+    public bool SellShip() => SellShip(selectedShip);
     public void RenameShip(string n) { if (selectedShip) selectedShip.shipName = n; }
     public int GetGold() => currentGold;
 }

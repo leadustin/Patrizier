@@ -8,8 +8,8 @@ public class City : MonoBehaviour
     // ------------------------------------------------------------
     [Header("Allgemeine Info")]
     public string cityName = "Unbenannt";
-    public CityType type = CityType.Hansestadt; // Hansestadt oder Kontor
-    public Sprite cityBackgroundSprite;         // Das Bild für die Stadtansicht
+    public CityType type = CityType.Hansestadt;
+    public Sprite cityBackgroundSprite;
 
     [Header("Wirtschaft & Bevölkerung")]
     public int population = 2000;
@@ -36,7 +36,7 @@ public class City : MonoBehaviour
     }
 
     // ------------------------------------------------------------
-    // 3. PRODUKTION (WAS WIRD HERGESTELLT?)
+    // 3. PRODUKTION
     // ------------------------------------------------------------
     [Header("Produktion (Konfigurierbar)")]
     public List<ProductionBuilding> productionLines = new List<ProductionBuilding>();
@@ -46,11 +46,8 @@ public class City : MonoBehaviour
     {
         public string name = "Betrieb";
         public WareType ware;
-
-        [Header("Produktion pro Tag (Basis)")]
         public int baseAmount = 10;
 
-        [Header("Jahreszeiten-Faktor (1.0 = 100%)")]
         [Range(0f, 2f)] public float springMult = 1.0f;
         [Range(0f, 2f)] public float summerMult = 1.0f;
         [Range(0f, 2f)] public float autumnMult = 1.0f;
@@ -72,12 +69,11 @@ public class City : MonoBehaviour
         public bool isHardWinter;
     }
 
-    // Die Warenlager (String = Warenname, Int = Menge)
     public Dictionary<string, int> kontorInventory = new Dictionary<string, int>();
     public Dictionary<string, int> marketInventory = new Dictionary<string, int>();
 
     [Header("Dein Besitz")]
-    [Range(0, 3)] public int kontorLevel = 0; // 0=Keins, 1=Kontor...
+    [Range(0, 3)] public int kontorLevel = 0;
 
     // ------------------------------------------------------------
     // 5. INITIALISIERUNG & ZEIT-SYSTEM
@@ -110,7 +106,7 @@ public class City : MonoBehaviour
     }
 
     // ------------------------------------------------------------
-    // 6. TÄGLICHE LOGIK (VERBRAUCH & PRODUKTION)
+    // 6. TÄGLICHE LOGIK
     // ------------------------------------------------------------
     void HandleNewDay(System.DateTime date, Season season)
     {
@@ -149,7 +145,7 @@ public class City : MonoBehaviour
     }
 
     // ------------------------------------------------------------
-    // 7. INTERAKTION (MAUS KLICK)
+    // 7. INTERAKTION
     // ------------------------------------------------------------
     void OnMouseDown()
     {
@@ -171,13 +167,7 @@ public class City : MonoBehaviour
                 City startCity = selectedShip.currentCityLocation;
 
                 if (startCity != null && movement != null)
-                {
                     movement.SetDestination(startCity, this);
-                }
-                else
-                {
-                    Debug.LogWarning("Schiff hat keinen bekannten Start-Hafen! (Evtl. manuell setzen)");
-                }
             }
         }
         else
@@ -187,76 +177,47 @@ public class City : MonoBehaviour
     }
 
     // ------------------------------------------------------------
-    // 8. HILFSMETHODEN (API)
+    // 8. HILFSMETHODEN
     // ------------------------------------------------------------
 
     public bool DoesProduce(string wareName)
     {
-        foreach (var p in productionLines)
-        {
-            if (p.ware.ToString() == wareName) return true;
-        }
+        foreach (var p in productionLines) if (p.ware.ToString() == wareName) return true;
         return false;
     }
 
-    // --- PREIS BERECHNUNG ---
-
-    // Einfache Abfrage (für UI etc.)
     public int GetCurrentPrice(string ware)
     {
         return EconomySystem.CalculatePrice(ware, GetMarketStock(ware), this);
     }
 
-    // Erweiterte Abfrage (WICHTIG für PlayerManager/Werft)
     public int GetPrice(string ware, bool isBuyingFromCity)
     {
         int basePrice = GetCurrentPrice(ware);
-
-        // Optional: Kauf von der Stadt ist teurer als Verkauf an die Stadt (Spread)
-        // Hier: 10% Aufschlag wenn man Material kauft
-        if (isBuyingFromCity)
-        {
-            return Mathf.CeilToInt(basePrice * 1.1f);
-        }
-
+        if (isBuyingFromCity) return Mathf.CeilToInt(basePrice * 1.1f);
         return basePrice;
     }
 
-    // --- MARKT INVENTAR ---
-    public int GetMarketStock(string ware)
-    {
-        return marketInventory.ContainsKey(ware) ? marketInventory[ware] : 0;
-    }
+    public int GetMarketStock(string ware) { return marketInventory.ContainsKey(ware) ? marketInventory[ware] : 0; }
 
     public void RemoveMarketStock(string ware, int amount)
     {
-        if (marketInventory.ContainsKey(ware))
-            marketInventory[ware] -= amount;
-
+        if (marketInventory.ContainsKey(ware)) marketInventory[ware] -= amount;
         if (marketInventory[ware] < 0) marketInventory[ware] = 0;
     }
 
     public void AddMarketStock(string ware, int amount)
     {
-        if (marketInventory.ContainsKey(ware))
-            marketInventory[ware] += amount;
-        else
-            marketInventory.Add(ware, amount);
+        if (marketInventory.ContainsKey(ware)) marketInventory[ware] += amount;
+        else marketInventory.Add(ware, amount);
     }
 
-    // --- KONTOR INVENTAR ---
-    public int GetKontorStock(string ware)
-    {
-        return kontorInventory.ContainsKey(ware) ? kontorInventory[ware] : 0;
-    }
+    public int GetKontorStock(string ware) { return kontorInventory.ContainsKey(ware) ? kontorInventory[ware] : 0; }
 
     public void AddToKontor(string ware, int amount)
     {
-        if (kontorInventory.ContainsKey(ware))
-            kontorInventory[ware] += amount;
-        else
-            kontorInventory.Add(ware, amount);
-
+        if (kontorInventory.ContainsKey(ware)) kontorInventory[ware] += amount;
+        else kontorInventory.Add(ware, amount);
         if (kontorInventory[ware] < 0) kontorInventory[ware] = 0;
     }
 }
